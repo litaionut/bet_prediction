@@ -10,18 +10,32 @@
 <h1>{{ country_name }}</h1>
 <p>Select a league to see past and upcoming fixtures.</p>
 {% if competitions %}
+<form method="post" action="{% url 'api_football:competition_bulk_delete' %}" id="bulk-delete-form">
+  {% csrf_token %}
+  <input type="hidden" name="country_slug" value="{{ country_slug }}">
+  <p style="margin-bottom:0.5rem;">
+    <button type="submit" form="bulk-delete-form" style="background:#da3633; color:#fff; border:none; padding:0.4rem 0.75rem; border-radius:6px; cursor:pointer; font-size:0.9rem;">Delete selected</button>
+    <span style="color:#8b949e; font-size:0.9rem; margin-left:0.5rem;">Check leagues to remove; they will not be synced anymore.</span>
+  </p>
 <ul style="list-style:none; padding:0;">
   {% for c in competitions %}
-  <li style="padding:0.75rem 0; border-bottom:1px solid #30363d;">
-    {% if primary_competition and c.pk == primary_competition.pk %}
-    <span style="background:#238636; color:#fff; font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:4px; margin-right:0.5rem;">Top</span>
-    {% endif %}
-    <a href="{% url 'api_football:competition_detail' c.pk %}" style="color:#58a6ff; text-decoration:none;">{{ c.name }}</a>
-    {% if c.type %}<span style="color:#8b949e;"> — {{ c.type }}</span>{% endif %}
-    <span style="color:#8b949e;"> ({{ c.game_count }} game{{ c.game_count|pluralize }})</span>
+  <li style="padding:0.75rem 0; border-bottom:1px solid #30363d; display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap;">
+    <span style="display:flex; align-items:center; gap:0.5rem;">
+      <input type="checkbox" name="competition_ids" value="{{ c.pk }}" id="cb-{{ c.pk }}" form="bulk-delete-form">
+      <label for="cb-{{ c.pk }}" style="cursor:pointer;">
+      {% if primary_competition and c.pk == primary_competition.pk %}
+      <span style="background:#238636; color:#fff; font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:4px; margin-right:0.5rem;">Top</span>
+      {% endif %}
+      <a href="{% url 'api_football:competition_detail' c.pk %}" style="color:#58a6ff; text-decoration:none;">{{ c.name }}</a>
+      {% if c.type %}<span style="color:#8b949e;"> — {{ c.type }}</span>{% endif %}
+      <span style="color:#8b949e;"> ({{ c.game_count }} game{{ c.game_count|pluralize }})</span>
+      </label>
+    </span>
+    <a href="{% url 'api_football:competition_delete' c.pk %}" style="font-size:0.85rem; color:#f85149;">Delete</a>
   </li>
   {% endfor %}
 </ul>
+</form>
 {% else %}
 <p style="color:#8b949e;">No leagues in the database for this country. Use <a href="{% url 'api_football:sync' %}">Sync league data</a> to load leagues for {{ country_name }}.</p>
 {% endif %}

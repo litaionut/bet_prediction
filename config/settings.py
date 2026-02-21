@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'dashboard',
     'api_football',
+    'ml_gemini',
 ]
 
 MIDDLEWARE = [

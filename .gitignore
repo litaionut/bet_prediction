@@ -33,3 +33,7 @@ staticfiles/
 # OS
 .DS_Store
 Thumbs.db
+
+# ML generated
+gemini_dataset_*.csv
+gemini_poisson*.json

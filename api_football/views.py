@@ -10,6 +10,24 @@ from itertools import groupby
 
 from .models import Country, Competition, Game, GameStatistics
 
+# Optional ML Over/Under 2.5 (Poisson); avoid import errors if deps missing
+try:
+    from ml_gemini.features import (
+        get_game_features,
+        get_model_filename_for_competition,
+        get_model_filename_for_league,
+        get_competition_for_league,
+    )
+    from ml_gemini.poisson_model import predict_lambda_for_game
+    from ml_gemini.poisson_probability import poisson_probabilities
+except Exception:
+    get_game_features = None
+    get_model_filename_for_competition = None
+    get_model_filename_for_league = None
+    get_competition_for_league = None
+    predict_lambda_for_game = None
+    poisson_probabilities = None
+
 
 def _country_name_from_slug(slug):
     """Resolve URL slug to country name (from Country or Competition)."""
@@ -102,6 +120,61 @@ def country_detail(request, slug):
     return render(request, "api_football/country_detail.html", context)
 
 
+def competition_delete(request, pk):
+    """Delete a competition (league). Removes the league and all its fixtures; it will no longer be synced."""
+    competition = get_object_or_404(
+        Competition.objects.annotate(game_count=Count("games")), pk=pk
+    )
+    if request.method == "POST":
+        country_name = competition.country
+        country_slug = slugify(country_name) or (country_name.lower().replace(" ", "-") if country_name else None)
+        name = competition.name
+        competition.delete()
+        messages.success(request, f"Deleted league «{name}» and all its fixtures. It will not be synced anymore.")
+        if country_slug:
+            return redirect("api_football:country_detail", slug=country_slug)
+        return redirect("api_football:competition_list")
+
+    return render(
+        request,
+        "api_football/competition_confirm_delete.html",
+        {"competition": competition},
+    )
+
+
+def competition_bulk_delete(request):
+    """Delete multiple competitions (leagues) selected by checkbox. POST only."""
+    if request.method != "POST":
+        return redirect("api_football:competition_list")
+
+    raw_ids = request.POST.getlist("competition_ids")
+    ids = []
+    for i in raw_ids:
+        try:
+            ids.append(int(i))
+        except (TypeError, ValueError):
+            continue
+
+    if not ids:
+        messages.warning(request, "No leagues selected.")
+        country_slug = (request.POST.get("country_slug") or "").strip()
+        if country_slug:
+            return redirect("api_football:country_detail", slug=country_slug)
+        return redirect("api_football:competition_list")
+
+    to_delete = Competition.objects.filter(pk__in=ids)
+    count = to_delete.count()
+    to_delete.delete()
+    messages.success(
+        request,
+        f"Deleted {count} league{'s' if count != 1 else ''} and all their fixtures. They will not be synced anymore.",
+    )
+    country_slug = (request.POST.get("country_slug") or "").strip()
+    if country_slug:
+        return redirect("api_football:country_detail", slug=country_slug)
+    return redirect("api_football:competition_list")
+
+
 def competition_detail(request, pk):
     """Show one league: seasons and fixtures (upcoming + past)."""
     competition = get_object_or_404(Competition, pk=pk)
@@ -138,6 +211,25 @@ def competition_detail(request, pk):
     )
 
     country_slug = slugify(competition.country) or competition.country.lower().replace(" ", "-") if competition.country else ""
+    game_ml_odds = {}
+    if get_model_filename_for_competition and predict_lambda_for_game and poisson_probabilities:
+        base_dir = getattr(settings, "BASE_DIR", None)
+        if base_dir and competition:
+            filename = get_model_filename_for_competition(competition)
+            if filename:
+                model_path = base_dir / filename
+                if model_path.exists():
+                    for g in upcoming + past:
+                        lam = predict_lambda_for_game(g, model_path)
+                        if lam is not None:
+                            p_over = poisson_probabilities(lam).get("prob_over_2_5")
+                            if p_over is not None:
+                                game_ml_odds[g.pk] = {
+                                    "ml_over_pct": round(100 * p_over),
+                                    "ml_under_pct": round(100 * (1 - p_over)),
+                                }
+    upcoming_with_ml = [(g, game_ml_odds.get(g.pk)) for g in upcoming]
+    past_with_ml = [(g, game_ml_odds.get(g.pk)) for g in past]
     context = {
         "competition": competition,
         "country_slug": country_slug,
@@ -145,6 +237,9 @@ def competition_detail(request, pk):
         "season_param": season_param,
         "upcoming": upcoming,
         "past": past,
+        "upcoming_with_ml": upcoming_with_ml,
+        "past_with_ml": past_with_ml,
+        "game_ml_odds": game_ml_odds,
     }
     return render(request, "api_football/competition_detail.html", context)
 
@@ -154,16 +249,34 @@ def game_statistics(request, pk):
     game = get_object_or_404(
         Game.objects.select_related("home_team", "away_team", "competition"), pk=pk
     )
+    gemini_row = get_game_features(game) if get_game_features else None
+    gemini_poisson = None
+    if game.competition and get_model_filename_for_competition and predict_lambda_for_game and poisson_probabilities:
+        filename = get_model_filename_for_competition(game.competition)
+        if filename:
+            model_path = getattr(settings, "BASE_DIR", None) and (settings.BASE_DIR / filename)
+            if model_path and model_path.exists():
+                lam = predict_lambda_for_game(game, model_path)
+                if lam is not None:
+                    gemini_poisson = poisson_probabilities(lam)
+
+    def _stats_context(extra=None):
+        d = {
+            "game": game,
+            "stats_available": False,
+            "error": extra.get("error", ""),
+            "stats_rows": [],
+            "gemini_row": gemini_row,
+            "gemini_poisson": gemini_poisson,
+        }
+        d.update(extra or {})
+        return d
+
     if not game.is_finished():
         return render(
             request,
             "api_football/game_statistics.html",
-            {
-                "game": game,
-                "stats_available": False,
-                "error": "Statistics are available only for finished games.",
-                "stats_rows": [],
-            },
+            _stats_context({"error": "Statistics are available only for finished games."}),
         )
     rows = list(game.statistics_rows.select_related("team").all())
     home_row = next((r for r in rows if r.team_id == game.home_team_id), None)
@@ -172,12 +285,7 @@ def game_statistics(request, pk):
         return render(
             request,
             "api_football/game_statistics.html",
-            {
-                "game": game,
-                "stats_available": False,
-                "error": "No statistics for this fixture. Use Sync league data → Sync fixture statistics.",
-                "stats_rows": [],
-            },
+            _stats_context({"error": "No statistics for this fixture. Use Sync league data → Sync fixture statistics."}),
         )
     stat_by_type = {}
     for s in home_row.statistics or []:
@@ -198,8 +306,78 @@ def game_statistics(request, pk):
             "home_team": game.home_team,
             "away_team": game.away_team,
             "stats_rows": stats_rows,
+            "gemini_row": gemini_row,
+            "gemini_poisson": gemini_poisson,
         },
     )
+
+
+def gemini_predictions(request):
+    """List games with ML prediction: expected goals (lambda) and P(Over 2.5)."""
+    from datetime import timedelta
+
+    league = (request.GET.get("league") or "premier").strip().lower() or "premier"
+    comp_pk = request.GET.get("competition")
+    try:
+        comp_pk = int(comp_pk) if comp_pk else None
+    except (TypeError, ValueError):
+        comp_pk = None
+
+    # All competitions that have at least one game (for "pick by name" dropdown)
+    competitions_list = list(
+        Competition.objects.filter(games__isnull=False)
+        .distinct()
+        .order_by("country", "name")
+    )
+
+    context = {
+        "games_with_prediction": [],
+        "competition": None,
+        "model_available": False,
+        "league": league,
+        "competitions_list": competitions_list,
+    }
+
+    comp = None
+    model_path = None
+    if comp_pk and get_model_filename_for_competition:
+        comp = Competition.objects.filter(pk=comp_pk).first()
+        if comp:
+            filename = get_model_filename_for_competition(comp)
+            if filename:
+                model_path = getattr(settings, "BASE_DIR", None) and (settings.BASE_DIR / filename)
+    elif get_competition_for_league and get_model_filename_for_league:
+        comp = get_competition_for_league(league)
+        if comp:
+            model_path = getattr(settings, "BASE_DIR", None) and (settings.BASE_DIR / get_model_filename_for_league(league))
+
+    if not comp:
+        return render(request, "api_football/gemini_predictions.html", context)
+    context["competition"] = comp
+    if not model_path or not model_path.exists():
+        return render(request, "api_football/gemini_predictions.html", context)
+
+    context["model_available"] = True
+    now = timezone.now()
+    start = now - timedelta(days=3)
+    end = now + timedelta(days=14)
+    games = (
+        Game.objects.filter(competition=comp, kickoff__gte=start, kickoff__lte=end)
+        .select_related("home_team", "away_team")
+        .order_by("kickoff")[:80]
+    )
+    rows = []
+    for game in games:
+        lam = predict_lambda_for_game(game, model_path) if predict_lambda_for_game else None
+        if lam is not None:
+            probs = poisson_probabilities(lam) if poisson_probabilities else None
+            rows.append({
+                "game": game,
+                "lambda": lam,
+                "prob_over_2_5": probs.get("prob_over_2_5") if probs else None,
+            })
+    context["games_with_prediction"] = rows
+    return render(request, "api_football/gemini_predictions.html", context)
 
 
 from .client import remaining_requests_today

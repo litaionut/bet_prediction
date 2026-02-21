@@ -1,0 +1,60 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}ML Over/Under 2.5 predictions – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;">
+  <a href="{% url 'api_football:competition_list' %}" style="color:#8b949e;">← Competitions</a>
+</p>
+
+<h1>ML Over/Under 2.5 predictions</h1>
+<p style="color:#8b949e;">Expected goals (λ) and P(Over 2.5) from Poisson model. Games: last 3 days and next 14 days.</p>
+
+<p style="margin-bottom:0.5rem;"><strong>By league:</strong>
+  <a href="?league=premier">Premier League</a> ·
+  <a href="?league=laliga">La Liga</a> ·
+  <a href="?league=ligue1">Ligue 1</a>
+  {% if competition %}<span style="margin-left:0.5rem;">· Current: {{ competition.name }}</span>{% endif %}
+</p>
+<p style="margin-bottom:1rem;">
+  <strong>By competition (no ID needed):</strong>
+  <form method="get" action="{% url 'api_football:gemini_predictions' %}" style="display:inline;">
+    <select name="competition" onchange="this.form.submit()" style="background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem; margin-left:0.35rem;">
+      <option value="">-- Choose competition --</option>
+      {% for c in competitions_list %}
+      <option value="{{ c.pk }}" {% if competition and competition.pk == c.pk %}selected{% endif %}>{{ c.name }} ({{ c.country }})</option>
+      {% endfor %}
+    </select>
+  </form>
+</p>
+
+{% if not model_available %}
+<p style="color:#f85149;">No trained model for this competition. To find competition IDs: <code>python manage.py list_competitions</code>. Then: <code>python manage.py build_gemini_dataset -c &lt;pk_or_api_id&gt; -o gemini_dataset.csv</code>, <code>train_gemini_poisson -d ... -o ...</code>, or use <code>train_all_gemini_competitions</code>.</p>
+{% elif not games_with_prediction %}
+<p style="color:#8b949e;">No games in the date window for {{ competition.name }}, or features could not be computed.</p>
+{% else %}
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.5rem 0.5rem 0;">Kickoff</th>
+      <th style="text-align:left; padding:0.5rem;">Home</th>
+      <th style="text-align:left; padding:0.5rem;">Away</th>
+      <th style="text-align:center; padding:0.5rem;">λ (expected goals)</th>
+      <th style="text-align:center; padding:0.5rem;">P(Over 2.5)</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in games_with_prediction %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ row.game.kickoff|date:"Y-m-d H:i" }}</td>
+      <td style="padding:0.5rem;">{{ row.game.home_team.name }}</td>
+      <td style="padding:0.5rem;">{{ row.game.away_team.name }}</td>
+      <td style="text-align:center; padding:0.5rem;">{{ row.lambda|floatformat:2 }}</td>
+      <td style="text-align:center; padding:0.5rem;">{{ row.prob_over_2_5|floatformat:2 }}</td>
+      <td style="padding:0.5rem;"><a href="{% url 'api_football:game_statistics' row.game.pk %}" style="color:#58a6ff;">Stats</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

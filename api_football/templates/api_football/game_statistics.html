@@ -14,6 +14,13 @@
 <p style="color:#8b949e;">{{ game.kickoff|date:"Y-m-d H:i" }} · {{ game.get_status_display }}</p>
 <p style="font-size:1.25rem; font-weight:600;">Score: {{ game.score_display }}</p>
 
+{% if gemini_poisson %}
+<p style="margin-top:0.5rem; color:#8b949e;">ML (Poisson): expected goals &lambda; = {{ gemini_poisson.lambda|floatformat:2 }}, P(Over 2.5) = {{ gemini_poisson.prob_over_2_5|floatformat:2 }}</p>
+{% endif %}
+{% if gemini_row %}
+<p style="margin-top:0.25rem; font-size:0.9rem; color:#8b949e;">Features: attack 5/10, defensive fragility 5/10, shots on goal 5/10, H2H goals avg. Actual: {{ gemini_row.total_goals_actual }} goals, Over 2.5: {{ gemini_row.is_over_2_5|yesno:"Yes,No" }}</p>
+{% endif %}
+
 {% if not stats_available %}
 <p style="color:#f85149;">{{ error }}</p>
 {% else %}

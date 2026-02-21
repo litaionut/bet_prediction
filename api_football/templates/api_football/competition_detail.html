@@ -7,6 +7,7 @@
   {% if country_slug %}
   · <a href="{% url 'api_football:country_detail' country_slug %}" style="color:#8b949e;">{{ competition.country }}</a>
   {% endif %}
+  · <a href="{% url 'api_football:competition_delete' competition.pk %}" style="color:#f85149;">Delete league</a>
 </p>
 
 <h1>{{ competition.name }}</h1>
@@ -33,15 +34,17 @@
       <th style="text-align:left; padding:0.5rem;">Home</th>
       <th style="text-align:center; padding:0.5rem;">Score</th>
       <th style="text-align:left; padding:0.5rem;">Away</th>
+      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">ML Over 2.5</th>{% endif %}
     </tr>
   </thead>
   <tbody>
-    {% for g in upcoming %}
+    {% for g, ml in upcoming_with_ml %}
     <tr style="border-bottom:1px solid #21262d;">
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ g.kickoff|date:"Y-m-d H:i" }}</td>
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
       <td style="text-align:center; padding:0.5rem;">{{ g.score_display }}</td>
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
+      {% if game_ml_odds %}<td style="text-align:center; padding:0.5rem;">{% if ml %}{{ ml.ml_over_pct }}% Over{% else %}—{% endif %}</td>{% endif %}
     </tr>
     {% endfor %}
   </tbody>
@@ -59,10 +62,11 @@
       <th style="text-align:left; padding:0.5rem;">Home</th>
       <th style="text-align:center; padding:0.5rem;">Score</th>
       <th style="text-align:left; padding:0.5rem;">Away</th>
+      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">ML Over 2.5</th>{% endif %}
     </tr>
   </thead>
   <tbody>
-    {% for g in past %}
+    {% for g, ml in past_with_ml %}
     <tr style="border-bottom:1px solid #21262d;">
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ g.kickoff|date:"Y-m-d H:i" }}</td>
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
@@ -70,6 +74,7 @@
         <a href="{% url 'api_football:game_statistics' g.pk %}" style="color:#58a6ff;">{{ g.score_display }}</a>
       </td>
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
+      {% if game_ml_odds %}<td style="text-align:center; padding:0.5rem;">{% if ml %}{{ ml.ml_over_pct }}% Over{% else %}—{% endif %}</td>{% endif %}
     </tr>
     {% endfor %}
   </tbody>

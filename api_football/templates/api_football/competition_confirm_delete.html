@@ -1,0 +1,19 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}Delete {{ competition.name }} – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;">
+  <a href="{% url 'api_football:competition_detail' competition.pk %}" style="color:#8b949e;">← {{ competition.name }}</a>
+  · <a href="{% url 'api_football:competition_list' %}" style="color:#8b949e;">Competitions</a>
+</p>
+
+<h1>Delete league</h1>
+<p>Remove <strong>{{ competition.name }}</strong>{% if competition.country %} ({{ competition.country }}){% endif %} from competitions?</p>
+<p style="color:#8b949e;">This will delete the league and all {{ competition.game_count }} fixture(s). Sync will no longer include this league.</p>
+
+<form method="post" action="{% url 'api_football:competition_delete' competition.pk %}" style="margin-top:1rem;">
+  {% csrf_token %}
+  <button type="submit" style="background:#da3633; color:#fff; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;">Delete league</button>
+  <a href="{% url 'api_football:competition_detail' competition.pk %}" style="margin-left:0.75rem; color:#8b949e;">Cancel</a>
+</form>
+{% endblock %}
