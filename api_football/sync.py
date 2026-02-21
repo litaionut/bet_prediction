@@ -195,13 +195,16 @@ def sync_fixtures(league_id, season, date_str=None, next_n=None):
             "venue_name": venue_name,
             "referee": referee,
         }
-        obj, was_created = Game.objects.update_or_create(
-            api_id=api_id, defaults=defaults
-        )
-        if was_created:
-            created += 1
-        else:
-            updated += 1
+        try:
+            obj, was_created = Game.objects.update_or_create(
+                api_id=api_id, defaults=defaults
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+        except Exception:
+            continue
     return created, updated
 
 
