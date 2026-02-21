@@ -49,6 +49,17 @@
     {% endfor %}
   </tbody>
 </table>
+{% if upcoming_paginator.num_pages > 1 %}
+<p style="margin-top:0.5rem; font-size:0.9rem;">
+  {% if upcoming_page.has_previous %}
+  <a href="?{% if season_param %}season={{ season_param }}&{% endif %}upcoming_page={{ upcoming_page.previous_page_number }}{% if past_page.number > 1 %}&past_page={{ past_page.number }}{% endif %}" style="color:#58a6ff;">← Previous</a>
+  {% endif %}
+  <span style="color:#8b949e;"> Page {{ upcoming_page.number }} of {{ upcoming_paginator.num_pages }}</span>
+  {% if upcoming_page.has_next %}
+  <a href="?{% if season_param %}season={{ season_param }}&{% endif %}upcoming_page={{ upcoming_page.next_page_number }}{% if past_page.number > 1 %}&past_page={{ past_page.number }}{% endif %}" style="color:#58a6ff;">Next →</a>
+  {% endif %}
+</p>
+{% endif %}
 {% else %}
 <p style="color:#8b949e;">No upcoming fixtures.</p>
 {% endif %}
@@ -66,7 +77,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for g, ml in past_with_ml %}
+    {% for g, ml, ml_correct in past_with_ml %}
     <tr style="border-bottom:1px solid #21262d;">
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ g.kickoff|date:"Y-m-d H:i" }}</td>
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
@@ -74,11 +85,28 @@
         <a href="{% url 'api_football:game_statistics' g.pk %}" style="color:#58a6ff;">{{ g.score_display }}</a>
       </td>
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
-      {% if game_ml_odds %}<td style="text-align:center; padding:0.5rem;">{% if ml %}{{ ml.ml_over_pct }}% Over{% else %}—{% endif %}</td>{% endif %}
+      {% if game_ml_odds %}
+      <td style="text-align:center; padding:0.5rem;">
+        {% if ml %}
+        <span style="color:{% if ml_correct %}#3fb950{% elif ml_correct == False %}#f85149{% else %}#8b949e{% endif %};">{{ ml.ml_over_pct }}% Over</span>
+        {% else %}—{% endif %}
+      </td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
 </table>
+{% if past_paginator.num_pages > 1 %}
+<p style="margin-top:0.5rem; font-size:0.9rem;">
+  {% if past_page.has_previous %}
+  <a href="?{% if season_param %}season={{ season_param }}&{% endif %}{% if upcoming_page.number > 1 %}upcoming_page={{ upcoming_page.number }}&{% endif %}past_page={{ past_page.previous_page_number }}" style="color:#58a6ff;">← Previous</a>
+  {% endif %}
+  <span style="color:#8b949e;"> Page {{ past_page.number }} of {{ past_paginator.num_pages }}</span>
+  {% if past_page.has_next %}
+  <a href="?{% if season_param %}season={{ season_param }}&{% endif %}{% if upcoming_page.number > 1 %}upcoming_page={{ upcoming_page.number }}&{% endif %}past_page={{ past_page.next_page_number }}" style="color:#58a6ff;">Next →</a>
+  {% endif %}
+</p>
+{% endif %}
 {% else %}
 <p style="color:#8b949e;">No past fixtures.</p>
 {% endif %}

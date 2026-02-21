@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
 from django.conf import settings
+from django.core.paginator import Paginator
 from django.db.models import Count
 from django.utils import timezone
 from django.utils.text import slugify
@@ -18,7 +19,7 @@ try:
         get_model_filename_for_league,
         get_competition_for_league,
     )
-    from ml_gemini.poisson_model import predict_lambda_for_game
+    from ml_gemini.poisson_model import predict_lambda_for_game, predict_lambdas_for_games
     from ml_gemini.poisson_probability import poisson_probabilities
 except Exception:
     get_game_features = None
@@ -26,6 +27,7 @@ except Exception:
     get_model_filename_for_league = None
     get_competition_for_league = None
     predict_lambda_for_game = None
+    predict_lambdas_for_games = None
     poisson_probabilities = None
 
 
@@ -197,39 +199,62 @@ def competition_detail(request, pk):
         .order_by("-season")
     )
 
-    # Upcoming: not finished, order by kickoff ascending (soonest first)
-    upcoming = list(
-        base_qs.exclude(
-            status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO, Game.Status.CANC)
-        ).order_by("kickoff")
-    )
-    # Past: finished, order by kickoff descending (most recent first)
-    past = list(
-        base_qs.filter(
-            status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO)
-        ).order_by("-kickoff")
-    )
+    # Pagination: only load one page of each (faster)
+    per_page = 25
+    upcoming_qs = base_qs.exclude(
+        status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO, Game.Status.CANC)
+    ).order_by("kickoff")
+    past_qs = base_qs.filter(
+        status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO)
+    ).order_by("-kickoff")
+
+    upcoming_paginator = Paginator(upcoming_qs, per_page)
+    past_paginator = Paginator(past_qs, per_page)
+    upcoming_page_num = request.GET.get("upcoming_page", 1)
+    past_page_num = request.GET.get("past_page", 1)
+    try:
+        upcoming_page = upcoming_paginator.page(int(upcoming_page_num))
+    except (ValueError, TypeError):
+        upcoming_page = upcoming_paginator.page(1)
+    try:
+        past_page = past_paginator.page(int(past_page_num))
+    except (ValueError, TypeError):
+        past_page = past_paginator.page(1)
+
+    upcoming = list(upcoming_page.object_list)
+    past = list(past_page.object_list)
 
     country_slug = slugify(competition.country) or competition.country.lower().replace(" ", "-") if competition.country else ""
     game_ml_odds = {}
-    if get_model_filename_for_competition and predict_lambda_for_game and poisson_probabilities:
+    # ML only for games on current page (load model once via predict_lambdas_for_games)
+    page_games = upcoming + past
+    if page_games and get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
         base_dir = getattr(settings, "BASE_DIR", None)
         if base_dir and competition:
             filename = get_model_filename_for_competition(competition)
             if filename:
                 model_path = base_dir / filename
                 if model_path.exists():
-                    for g in upcoming + past:
-                        lam = predict_lambda_for_game(g, model_path)
-                        if lam is not None:
-                            p_over = poisson_probabilities(lam).get("prob_over_2_5")
-                            if p_over is not None:
-                                game_ml_odds[g.pk] = {
-                                    "ml_over_pct": round(100 * p_over),
-                                    "ml_under_pct": round(100 * (1 - p_over)),
-                                }
+                    for g, lam in predict_lambdas_for_games(page_games, model_path):
+                        p_over = poisson_probabilities(lam).get("prob_over_2_5")
+                        if p_over is not None:
+                            game_ml_odds[g.pk] = {
+                                "ml_over_pct": round(100 * p_over),
+                                "ml_under_pct": round(100 * (1 - p_over)),
+                            }
     upcoming_with_ml = [(g, game_ml_odds.get(g.pk)) for g in upcoming]
-    past_with_ml = [(g, game_ml_odds.get(g.pk)) for g in past]
+    # For past games: add whether ML prediction matched the result (green=correct, red=wrong)
+    past_with_ml = []
+    for g in past:
+        ml = game_ml_odds.get(g.pk)
+        correct = None
+        if ml is not None:
+            total_goals = (g.home_goals or 0) + (g.away_goals or 0)
+            actual_over = total_goals > 2.5
+            predicted_over = ml["ml_over_pct"] >= 50
+            correct = actual_over == predicted_over
+        past_with_ml.append((g, ml, correct))
+
     context = {
         "competition": competition,
         "country_slug": country_slug,
@@ -240,6 +265,10 @@ def competition_detail(request, pk):
         "upcoming_with_ml": upcoming_with_ml,
         "past_with_ml": past_with_ml,
         "game_ml_odds": game_ml_odds,
+        "upcoming_page": upcoming_page,
+        "past_page": past_page,
+        "upcoming_paginator": upcoming_paginator,
+        "past_paginator": past_paginator,
     }
     return render(request, "api_football/competition_detail.html", context)
 
