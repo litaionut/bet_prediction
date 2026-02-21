@@ -18,6 +18,33 @@ import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load .env from project root (same folder as manage.py)
+_env_path = BASE_DIR / ".env"
+if _env_path.exists():
+    try:
+        with open(_env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+    except Exception:
+        pass
+# Also try python-dotenv if installed (loads from cwd too)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env")
+    load_dotenv()
+except ImportError:
+    pass
+
+# API-Football (v3): key from .env or environment (strip spaces/newlines)
+API_FOOTBALL_KEY = (os.environ.get("API_FOOTBALL_KEY") or "").strip()
+API_FOOTBALL_DAILY_LIMIT = int(os.environ.get("API_FOOTBALL_DAILY_LIMIT", "7500"))
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -58,6 +85,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'dashboard',
+    'api_football',
 ]
 
 MIDDLEWARE = [

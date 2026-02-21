@@ -1,0 +1,125 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}Sync league data – Bet Prediction{% endblock %}
+
+{% block content %}
+<h1>Sync data from API-Football</h1>
+
+{% if messages %}
+<ul class="messages" style="list-style:none; padding:0;">
+  {% for message in messages %}
+  <li style="padding:0.5rem 0.75rem; margin-bottom:0.5rem; border-radius:4px;
+    {% if message.tags == 'error' %}background:#3d1f1f; color:#f88;{% endif %}
+    {% if message.tags == 'success' %}background:#1f3d1f; color:#8f8;{% endif %}
+    {% if message.tags == 'warning' %}background:#3d3d1f; color:#cc8;{% endif %}">
+    {{ message }}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if not api_configured %}
+<p>API key is not set. Set <code>API_FOOTBALL_KEY</code> in your environment or in a <code>.env</code> file.</p>
+<p style="font-size:0.9rem; color:#8b949e;">{{ api_key_hint|default:"Put the key in a .env file in the project root (same folder as manage.py), then restart the server." }}</p>
+{% else %}
+
+<p><strong>Remaining API requests today:</strong> {{ remaining_requests }}</p>
+<p><strong>Step 1:</strong> Load countries. <strong>Step 2:</strong> Select countries and load their competitions. <strong>Step 3:</strong> Select competitions and year(s), then download teams and fixtures.</p>
+
+<form method="post" action="{% url 'api_football:sync' %}" id="sync-form">
+  {% csrf_token %}
+
+  <section style="background:#161b22; padding:1.25rem; border-radius:8px; margin-bottom:1rem; border:1px solid #30363d;">
+    <h2 style="margin-top:0;">1. Countries</h2>
+    {% if not countries %}
+    <p>No countries loaded yet. Click the button below to fetch the list from the API (1 request).</p>
+    <button type="submit" name="action" value="load_countries">Load countries</button>
+    {% else %}
+    <p>Select the countries you want to sync. Then click <strong>Load competitions</strong> to fetch their leagues.</p>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1.5rem; max-height:12rem; overflow-y:auto;">
+      {% for c in countries %}
+      <label style="display:flex; align-items:center; gap:0.35rem; white-space:nowrap;">
+        <input type="checkbox" name="country" value="{{ c.name }}" {% if c.name in selected_countries %}checked{% endif %}>
+        {{ c.name }}
+      </label>
+      {% endfor %}
+    </div>
+    <p style="margin-top:0.75rem;">
+      <button type="submit" name="action" value="load_leagues">Load competitions for selected countries</button>
+    </p>
+    {% endif %}
+  </section>
+
+  {% if selected_countries and competitions_by_country %}
+  <section style="background:#161b22; padding:1.25rem; border-radius:8px; margin-bottom:1rem; border:1px solid #30363d;">
+    <h2 style="margin-top:0;">2. Competitions ({{ selected_countries|length }} country/countries selected)</h2>
+    <p>Select the competitions and one or more season years, then click <strong>Download</strong> to fetch teams and fixtures.</p>
+    <div style="margin-bottom:1rem;">
+      <label for="years"><strong>Year(s) (season)</strong></label>
+      <input type="text" name="years" id="years" value="{{ years_param }}" placeholder="e.g. 2024 or 2022,2023,2024 or 2020-2024" style="width:18rem; margin-left:0.5rem; background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem;">
+      <span style="font-size:0.85rem; color:#8b949e; margin-left:0.35rem;">Single year, comma-separated, or range</span>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:1rem;">
+      {% for country_name, comps, primary_comp in competitions_by_country %}
+      <div>
+        <strong>{{ country_name }}</strong>
+        <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1rem; margin-top:0.35rem;">
+          {% for comp in comps %}
+          <label style="display:flex; align-items:center; gap:0.35rem;">
+            <input type="checkbox" name="competition" value="{{ comp.api_id }}">
+            {% if primary_comp and comp.pk == primary_comp.pk %}<span style="background:#238636; color:#fff; font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:4px; margin-right:0.15rem;" title="Top league">Top</span>{% endif %}
+            {{ comp.name }}{% if comp.type %} ({{ comp.type }}){% endif %} — {{ comp.game_count }} games
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p style="margin-top:1rem;">
+      {% for cn in selected_countries %}
+      <input type="hidden" name="country" value="{{ cn }}">
+      {% endfor %}
+      <button type="submit" name="action" value="download">Download selected (teams + fixtures)</button>
+    </p>
+  </section>
+  {% elif selected_countries %}
+  <p style="color:#8b949e;">No competitions found for the selected countries. Try loading competitions again.</p>
+  {% if actual_countries_in_db %}
+  <p style="font-size:0.9rem; color:#8b949e;">Country values in DB: {{ actual_countries_in_db|join:", " }}</p>
+  {% endif %}
+  {% endif %}
+</form>
+
+  <section style="background:#161b22; padding:1.25rem; border-radius:8px; margin-top:1.5rem; border:1px solid #30363d;">
+    <h2 style="margin-top:0;">3. Sync fixture statistics</h2>
+    <p style="font-size:0.9rem; color:#8b949e;">Fetch per-team statistics (shots, possession, etc.) for finished games. Uses 1 request per game.</p>
+    <p>Finished games without statistics: <strong>{{ games_without_stats }}</strong></p>
+    <form method="post" action="{% url 'api_football:sync' %}" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+      {% csrf_token %}
+      <label>Max requests (empty = no limit): <input type="number" name="stats_limit" min="1" max="500" placeholder="e.g. 50" style="width:6rem; background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem;"></label>
+      <button type="submit" name="action" value="sync_stats">Sync fixture statistics</button>
+    </form>
+  </section>
+
+  <section style="background:#161b22; padding:1.25rem; border-radius:8px; margin-top:1rem; border:1px solid #30363d;">
+    <h2 style="margin-top:0;">4. Sync predictions</h2>
+    <p style="font-size:0.9rem; color:#8b949e;">Fetch API predictions (winner, goals, advice) for games. Uses 1 request per game.</p>
+    <p>Games without prediction: <strong>{{ games_without_prediction }}</strong></p>
+    <form method="post" action="{% url 'api_football:sync' %}" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+      {% csrf_token %}
+      <label>Max requests (empty = no limit): <input type="number" name="predictions_limit" min="1" max="500" placeholder="e.g. 50" style="width:6rem; background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem;"></label>
+      <button type="submit" name="action" value="sync_predictions">Sync predictions</button>
+    </form>
+  </section>
+
+  <section style="background:#161b22; padding:1.25rem; border-radius:8px; margin-top:1rem; border:1px solid #30363d;">
+    <h2 style="margin-top:0;">5. Sync odds</h2>
+    <p style="font-size:0.9rem; color:#8b949e;">Fetch bookmaker odds for games that have a prediction. Uses 1 request per game.</p>
+    <form method="post" action="{% url 'api_football:sync' %}" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+      {% csrf_token %}
+      <label>Max requests (empty = no limit): <input type="number" name="odds_limit" min="1" max="500" placeholder="e.g. 50" style="width:6rem; background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem;"></label>
+      <button type="submit" name="action" value="sync_odds">Sync odds</button>
+    </form>
+  </section>
+
+{% endif %}
+{% endblock %}

@@ -21,6 +21,7 @@ from config.views import health_check
 
 urlpatterns = [
     path("", include("dashboard.urls")),
+    path("football/", include("api_football.urls")),
     path("admin/", admin.site.urls),
     path("health/", health_check, name="health"),
 ]

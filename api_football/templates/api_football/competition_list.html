@@ -1,0 +1,22 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}Competitions – Bet Prediction{% endblock %}
+
+{% block content %}
+<h1>Competitions</h1>
+<p>Countries that have data downloaded (leagues and fixtures).</p>
+
+{% if not countries_with_data %}
+<p style="color:#8b949e;">No data yet. Use <a href="{% url 'api_football:sync' %}">Sync league data</a> to load countries and download competitions.</p>
+{% else %}
+<ul style="list-style:none; padding:0;">
+  {% for row in countries_with_data %}
+  <li style="padding:0.75rem 0; border-bottom:1px solid #30363d; display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+    <span style="font-weight:500;">{{ row.country }}</span>
+    <span style="font-size:0.9rem; color:#8b949e;">
+      {{ row.competition_count }} league{{ row.competition_count|pluralize }}, {{ row.game_count }} game{{ row.game_count|pluralize }}
+    </span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}
