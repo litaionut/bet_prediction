@@ -38,6 +38,15 @@ if os.environ.get("RAILWAY_STATIC_URL"):
     if host:
         ALLOWED_HOSTS.append(host)
 
+# CSRF: required for Django 4+ when using HTTPS (e.g. admin login on Railway)
+_origins = os.environ.get("CSRF_TRUSTED_ORIGINS", "").strip()
+if _origins:
+    CSRF_TRUSTED_ORIGINS = [x.strip() for x in _origins.split(",") if x.strip()]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        "https://betprediction-production-d320.up.railway.app",
+    ]
+
 
 # Application definition
 
