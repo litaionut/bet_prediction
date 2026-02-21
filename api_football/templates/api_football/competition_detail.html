@@ -1,0 +1,78 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}{{ competition.name }} – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;">
+  <a href="{% url 'api_football:competition_list' %}" style="color:#8b949e;">← Competitions</a>
+  {% if country_slug %}
+  · <a href="{% url 'api_football:country_detail' country_slug %}" style="color:#8b949e;">{{ competition.country }}</a>
+  {% endif %}
+</p>
+
+<h1>{{ competition.name }}</h1>
+{% if competition.country or competition.type %}
+<p style="color:#8b949e;">{% if competition.country %}{{ competition.country }}{% endif %}{% if competition.type %} · {{ competition.type }}{% endif %}</p>
+{% endif %}
+
+{% if seasons %}
+<p style="margin-bottom:1rem;">
+  <strong>Season:</strong>
+  <a href="{% url 'api_football:competition_detail' competition.pk %}" style="margin-left:0.35rem; color:{% if not season_param %}#58a6ff{% else %}#8b949e{% endif %};">All</a>
+  {% for s in seasons %}
+  · <a href="?season={{ s }}" style="color:{% if season_param == s %}#58a6ff{% else %}#8b949e{% endif %};">{{ s }}</a>
+  {% endfor %}
+</p>
+{% endif %}
+
+<h2 style="font-size:1.1rem; margin-top:1.5rem;">Upcoming fixtures</h2>
+{% if upcoming %}
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.5rem 0.5rem 0;">Date</th>
+      <th style="text-align:left; padding:0.5rem;">Home</th>
+      <th style="text-align:center; padding:0.5rem;">Score</th>
+      <th style="text-align:left; padding:0.5rem;">Away</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for g in upcoming %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ g.kickoff|date:"Y-m-d H:i" }}</td>
+      <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
+      <td style="text-align:center; padding:0.5rem;">{{ g.score_display }}</td>
+      <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#8b949e;">No upcoming fixtures.</p>
+{% endif %}
+
+<h2 style="font-size:1.1rem; margin-top:1.5rem;">Past results</h2>
+{% if past %}
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.5rem 0.5rem 0;">Date</th>
+      <th style="text-align:left; padding:0.5rem;">Home</th>
+      <th style="text-align:center; padding:0.5rem;">Score</th>
+      <th style="text-align:left; padding:0.5rem;">Away</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for g in past %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ g.kickoff|date:"Y-m-d H:i" }}</td>
+      <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
+      <td style="text-align:center; padding:0.5rem;">{{ g.score_display }}</td>
+      <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#8b949e;">No past fixtures.</p>
+{% endif %}
+{% endblock %}

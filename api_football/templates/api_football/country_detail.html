@@ -1,0 +1,29 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}{% if country_name %}{{ country_name }} – Leagues{% else %}Country{% endif %} – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;"><a href="{% url 'api_football:competition_list' %}" style="color:#8b949e;">← Competitions</a></p>
+
+{% if not country_name %}
+<p>Country not found.</p>
+{% else %}
+<h1>{{ country_name }}</h1>
+<p>Select a league to see past and upcoming fixtures.</p>
+{% if competitions %}
+<ul style="list-style:none; padding:0;">
+  {% for c in competitions %}
+  <li style="padding:0.75rem 0; border-bottom:1px solid #30363d;">
+    {% if primary_competition and c.pk == primary_competition.pk %}
+    <span style="background:#238636; color:#fff; font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:4px; margin-right:0.5rem;">Top</span>
+    {% endif %}
+    <a href="{% url 'api_football:competition_detail' c.pk %}" style="color:#58a6ff; text-decoration:none;">{{ c.name }}</a>
+    {% if c.type %}<span style="color:#8b949e;"> — {{ c.type }}</span>{% endif %}
+    <span style="color:#8b949e;"> ({{ c.game_count }} game{{ c.game_count|pluralize }})</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p style="color:#8b949e;">No leagues in the database for this country. Use <a href="{% url 'api_football:sync' %}">Sync league data</a> to load leagues for {{ country_name }}.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

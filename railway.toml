@@ -1,0 +1,3 @@
+# Railway deploy config: run migrations before starting the app
+[deploy]
+preDeployCommand = "python manage.py migrate --noinput"

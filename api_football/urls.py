@@ -6,4 +6,6 @@ app_name = "api_football"
 urlpatterns = [
     path("sync/", views.sync_page, name="sync"),
     path("competitions/", views.competition_list, name="competition_list"),
+    path("countries/<slug:slug>/", views.country_detail, name="country_detail"),
+    path("competitions/<int:pk>/", views.competition_detail, name="competition_detail"),
 ]

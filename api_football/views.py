@@ -1,24 +1,121 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
 from django.conf import settings
 from django.db.models import Count
+from django.utils import timezone
+from django.utils.text import slugify
 from urllib.parse import urlencode
 from itertools import groupby
 
 from .models import Country, Competition, Game
 
 
+def _country_name_from_slug(slug):
+    """Resolve URL slug to country name (from Country or Competition)."""
+    c = Country.objects.filter(slug=slug).first()
+    if c:
+        return c.name
+    for name in (
+        Competition.objects.exclude(country="")
+        .values_list("country", flat=True)
+        .distinct()
+    ):
+        if (slugify(name) or name.lower().replace(" ", "-")) == slug:
+            return name
+    return None
+
+
 def competition_list(request):
     """List all countries that have competitions (data) downloaded."""
-    countries_with_data = (
+    qs = (
         Competition.objects.exclude(country="")
         .values("country")
         .annotate(competition_count=Count("id"), game_count=Count("games"))
         .order_by("country")
     )
+    countries_with_data = [
+        {
+            "country": row["country"],
+            "slug": slugify(row["country"]) or row["country"].lower().replace(" ", "-"),
+            "competition_count": row["competition_count"],
+            "game_count": row["game_count"],
+        }
+        for row in qs
+    ]
     context = {"countries_with_data": countries_with_data}
     return render(request, "api_football/competition_list.html", context)
+
+
+def country_detail(request, slug):
+    """List leagues (competitions) for this country. Click a league to see fixtures."""
+    country_name = _country_name_from_slug(slug)
+    if not country_name:
+        return render(
+            request,
+            "api_football/country_detail.html",
+            {"country_name": None, "country_slug": slug, "competitions": [], "primary_competition": None},
+        )
+    primary = Competition.get_primary_for_country(country_name)
+    competitions = (
+        Competition.objects.filter(country=country_name)
+        .annotate(game_count=Count("games"))
+        .order_by("rank", "api_id", "name")
+    )
+    context = {
+        "country_name": country_name,
+        "country_slug": slug,
+        "competitions": competitions,
+        "primary_competition": primary,
+    }
+    return render(request, "api_football/country_detail.html", context)
+
+
+def competition_detail(request, pk):
+    """Show one league: seasons and fixtures (upcoming + past)."""
+    competition = get_object_or_404(Competition, pk=pk)
+    now = timezone.now()
+    season_param = request.GET.get("season")
+    try:
+        season_param = int(season_param) if season_param else None
+    except (TypeError, ValueError):
+        season_param = None
+
+    base_qs = Game.objects.filter(competition=competition).select_related("home_team", "away_team")
+    if season_param is not None:
+        base_qs = base_qs.filter(season=season_param)
+
+    seasons = (
+        Game.objects.filter(competition=competition)
+        .exclude(season__isnull=True)
+        .values_list("season", flat=True)
+        .distinct()
+        .order_by("-season")
+    )
+
+    # Upcoming: not finished, order by kickoff ascending (soonest first)
+    upcoming = list(
+        base_qs.exclude(
+            status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO, Game.Status.CANC)
+        ).order_by("kickoff")
+    )
+    # Past: finished, order by kickoff descending (most recent first)
+    past = list(
+        base_qs.filter(
+            status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO)
+        ).order_by("-kickoff")
+    )
+
+    country_slug = slugify(competition.country) or competition.country.lower().replace(" ", "-") if competition.country else ""
+    context = {
+        "competition": competition,
+        "country_slug": country_slug,
+        "seasons": seasons,
+        "season_param": season_param,
+        "upcoming": upcoming,
+        "past": past,
+    }
+    return render(request, "api_football/competition_detail.html", context)
 
 
 from .client import remaining_requests_today
