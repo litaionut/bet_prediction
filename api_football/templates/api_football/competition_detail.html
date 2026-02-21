@@ -66,7 +66,9 @@
     <tr style="border-bottom:1px solid #21262d;">
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ g.kickoff|date:"Y-m-d H:i" }}</td>
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
-      <td style="text-align:center; padding:0.5rem;">{{ g.score_display }}</td>
+      <td style="text-align:center; padding:0.5rem;">
+        <a href="{% url 'api_football:game_statistics' g.pk %}" style="color:#58a6ff;">{{ g.score_display }}</a>
+      </td>
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
     </tr>
     {% endfor %}

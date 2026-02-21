@@ -8,7 +8,7 @@ from django.utils.text import slugify
 from urllib.parse import urlencode
 from itertools import groupby
 
-from .models import Country, Competition, Game
+from .models import Country, Competition, Game, GameStatistics
 
 
 def _country_name_from_slug(slug):
@@ -27,7 +27,35 @@ def _country_name_from_slug(slug):
 
 
 def competition_list(request):
-    """List all countries that have competitions (data) downloaded."""
+    """List all countries that have competitions (data) downloaded. POST: sync fixtures for all leagues."""
+    if request.method == "POST" and request.POST.get("action") == "sync_fixtures":
+        from .sync import sync_teams_for_league, sync_fixtures
+        year_str = (request.POST.get("season_year") or "").strip()
+        try:
+            year = int(year_str) if year_str else timezone.now().year
+        except (TypeError, ValueError):
+            year = timezone.now().year
+        if year < 2000 or year > 2100:
+            year = timezone.now().year
+        competitions = list(Competition.objects.all().order_by("country", "api_id"))
+        total_teams_c, total_teams_u = 0, 0
+        total_fix_c, total_fix_u = 0, 0
+        for comp in competitions:
+            try:
+                tc, tu = sync_teams_for_league(comp.api_id, year)
+                total_teams_c += tc
+                total_teams_u += tu
+                fc, fu = sync_fixtures(league_id=comp.api_id, season=year)
+                total_fix_c += fc
+                total_fix_u += fu
+            except Exception as e:
+                messages.warning(request, f"{comp.name}: {e}")
+        messages.success(
+            request,
+            f"Synced {len(competitions)} leagues for {year}: teams {total_teams_c} created, {total_teams_u} updated; fixtures {total_fix_c} created, {total_fix_u} updated.",
+        )
+        return redirect("api_football:competition_list")
+
     qs = (
         Competition.objects.exclude(country="")
         .values("country")
@@ -43,7 +71,10 @@ def competition_list(request):
         }
         for row in qs
     ]
-    context = {"countries_with_data": countries_with_data}
+    context = {
+        "countries_with_data": countries_with_data,
+        "current_year": timezone.now().year,
+    }
     return render(request, "api_football/competition_list.html", context)
 
 
@@ -116,6 +147,59 @@ def competition_detail(request, pk):
         "past": past,
     }
     return render(request, "api_football/competition_detail.html", context)
+
+
+def game_statistics(request, pk):
+    """Show match statistics (home vs away) for a finished game."""
+    game = get_object_or_404(
+        Game.objects.select_related("home_team", "away_team", "competition"), pk=pk
+    )
+    if not game.is_finished():
+        return render(
+            request,
+            "api_football/game_statistics.html",
+            {
+                "game": game,
+                "stats_available": False,
+                "error": "Statistics are available only for finished games.",
+                "stats_rows": [],
+            },
+        )
+    rows = list(game.statistics_rows.select_related("team").all())
+    home_row = next((r for r in rows if r.team_id == game.home_team_id), None)
+    away_row = next((r for r in rows if r.team_id == game.away_team_id), None)
+    if not home_row or not away_row:
+        return render(
+            request,
+            "api_football/game_statistics.html",
+            {
+                "game": game,
+                "stats_available": False,
+                "error": "No statistics for this fixture. Use Sync league data → Sync fixture statistics.",
+                "stats_rows": [],
+            },
+        )
+    stat_by_type = {}
+    for s in home_row.statistics or []:
+        t = (s.get("type") or "").strip()
+        if t:
+            stat_by_type.setdefault(t, {})["home"] = s.get("value") or ""
+    for s in away_row.statistics or []:
+        t = (s.get("type") or "").strip()
+        if t:
+            stat_by_type.setdefault(t, {})["away"] = s.get("value") or ""
+    stats_rows = [(t, d.get("home", ""), d.get("away", "")) for t, d in sorted(stat_by_type.items())]
+    return render(
+        request,
+        "api_football/game_statistics.html",
+        {
+            "game": game,
+            "stats_available": True,
+            "home_team": game.home_team,
+            "away_team": game.away_team,
+            "stats_rows": stats_rows,
+        },
+    )
 
 
 from .client import remaining_requests_today

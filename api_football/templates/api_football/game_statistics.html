@@ -1,0 +1,44 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}Statistics – {{ game.home_team.name }} vs {{ game.away_team.name }} – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;">
+  {% if game.competition %}
+  <a href="{% url 'api_football:competition_detail' game.competition_id %}" style="color:#8b949e;">← {{ game.competition.name }}</a>
+  {% else %}
+  <a href="{% url 'api_football:competition_list' %}" style="color:#8b949e;">← Competitions</a>
+  {% endif %}
+</p>
+
+<h1>{{ game.home_team.name }} vs {{ game.away_team.name }}</h1>
+<p style="color:#8b949e;">{{ game.kickoff|date:"Y-m-d H:i" }} · {{ game.get_status_display }}</p>
+<p style="font-size:1.25rem; font-weight:600;">Score: {{ game.score_display }}</p>
+
+{% if not stats_available %}
+<p style="color:#f85149;">{{ error }}</p>
+{% else %}
+<h2 style="font-size:1.1rem; margin-top:1.5rem;">Match statistics</h2>
+{% if stats_rows %}
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.5rem 0.5rem 0; width:40%;">Statistic</th>
+      <th style="text-align:center; padding:0.5rem; width:30%;">{{ home_team.name }}</th>
+      <th style="text-align:center; padding:0.5rem; width:30%;">{{ away_team.name }}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for stat_type, home_val, away_val in stats_rows %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.5rem 0.5rem 0;">{{ stat_type }}</td>
+      <td style="text-align:center; padding:0.5rem;">{{ home_val }}</td>
+      <td style="text-align:center; padding:0.5rem;">{{ away_val }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#8b949e;">No statistics recorded for this fixture.</p>
+{% endif %}
+{% endif %}
+{% endblock %}
