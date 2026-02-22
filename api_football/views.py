@@ -311,6 +311,47 @@ def competition_detail(request, pk):
             correct = actual_over == predicted_over
         past_with_ml.append((g, ml, correct))
 
+    # ML accuracy for this league: green (correct) / total past games with prediction
+    ml_accuracy = None
+    if get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
+        base_dir = getattr(settings, "BASE_DIR", None)
+        if base_dir and competition:
+            filename = get_model_filename_for_competition(competition)
+            if filename:
+                model_path = base_dir / filename
+                if model_path.exists():
+                    all_past_qs = base_qs.filter(
+                        status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO)
+                    ).order_by("kickoff")[:2000]
+                    all_past_list = list(all_past_qs)
+                    if all_past_list:
+                        total_with_pred = 0
+                        correct_count = 0
+                        current_missed = 0
+                        max_missed_row = 0
+                        for g, lam in predict_lambdas_for_games(all_past_list, model_path):
+                            p_over = poisson_probabilities(lam).get("prob_over_2_5")
+                            if p_over is not None:
+                                total_with_pred += 1
+                                total_goals = (g.home_goals or 0) + (g.away_goals or 0)
+                                actual_over = total_goals > 2.5
+                                predicted_over = p_over >= 0.5
+                                correct = actual_over == predicted_over
+                                if correct:
+                                    correct_count += 1
+                                    current_missed = 0
+                                else:
+                                    current_missed += 1
+                                    if current_missed > max_missed_row:
+                                        max_missed_row = current_missed
+                        if total_with_pred > 0:
+                            ml_accuracy = {
+                                "correct": correct_count,
+                                "total": total_with_pred,
+                                "pct": round(100 * correct_count / total_with_pred),
+                                "max_missed_row": max_missed_row,
+                            }
+
     context = {
         "competition": competition,
         "country_slug": country_slug,
@@ -321,6 +362,7 @@ def competition_detail(request, pk):
         "upcoming_with_ml": upcoming_with_ml,
         "past_with_ml": past_with_ml,
         "game_ml_odds": game_ml_odds,
+        "ml_accuracy": ml_accuracy,
         "upcoming_page": upcoming_page,
         "past_page": past_page,
         "upcoming_paginator": upcoming_paginator,
