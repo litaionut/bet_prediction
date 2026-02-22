@@ -1,0 +1,62 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}{% if is_today %}Today's games{% else %}Games on {{ selected_date|date:"F j, Y" }}{% endif %} – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;">
+  <a href="{% url 'api_football:competition_list' %}" style="color:#8b949e;">← Competitions</a>
+</p>
+
+<h1>{% if is_today %}Today's games{% else %}Games on {{ selected_date|date:"l, F j, Y" }}{% endif %}</h1>
+<p style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;">
+  <a href="{% url 'api_football:game_list_today' %}?date={{ prev_date|date:'Y-m-d' }}" style="color:#58a6ff;">← Previous day</a>
+  <span style="font-weight:bold;">{{ selected_date|date:"l, F j, Y" }}</span>
+  <a href="{% url 'api_football:game_list_today' %}?date={{ next_date|date:'Y-m-d' }}" style="color:#58a6ff;">Next day →</a>
+  {% if not is_today %}
+  <a href="{% url 'api_football:game_list_today' %}" style="color:#58a6ff;">Go to today</a>
+  {% endif %}
+</p>
+
+{% if games %}
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.5rem 0.5rem 0;">Time</th>
+      <th style="text-align:left; padding:0.5rem;">Home</th>
+      <th style="text-align:center; padding:0.5rem;">Score</th>
+      <th style="text-align:left; padding:0.5rem;">Away</th>
+      <th style="text-align:left; padding:0.5rem;">Competition</th>
+      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">ML Over 2.5</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for g, ml in games_with_ml %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{% if g.kickoff %}{{ g.kickoff|date:"H:i" }}{% else %}—{% endif %}</td>
+      <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
+      <td style="text-align:center; padding:0.5rem;">
+        {% if g.is_finished %}
+        <a href="{% url 'api_football:game_statistics' g.pk %}" style="color:#58a6ff;">{{ g.score_display }}</a>
+        {% else %}{{ g.score_display }}{% endif %}
+      </td>
+      <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
+      <td style="padding:0.5rem;">{% if g.competition %}<a href="{% url 'api_football:competition_detail' g.competition_id %}" style="color:#58a6ff;">{{ g.competition.name }}</a>{% else %}—{% endif %}</td>
+      {% if game_ml_odds %}<td style="text-align:center; padding:0.5rem;">{% if ml %}{{ ml.ml_over_pct }}% Over{% else %}—{% endif %}</td>{% endif %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if paginator.num_pages > 1 %}
+<p style="margin-top:0.5rem; font-size:0.9rem;">
+  {% if page.has_previous %}
+  <a href="?date={{ selected_date|date:'Y-m-d' }}&page={{ page.previous_page_number }}" style="color:#58a6ff;">← Previous</a>
+  {% endif %}
+  <span style="color:#8b949e;"> Page {{ page.number }} of {{ paginator.num_pages }}</span>
+  {% if page.has_next %}
+  <a href="?date={{ selected_date|date:'Y-m-d' }}&page={{ page.next_page_number }}" style="color:#58a6ff;">Next →</a>
+  {% endif %}
+</p>
+{% endif %}
+{% else %}
+<p style="color:#8b949e;">No fixtures for this day. Use <strong>Previous day</strong> / <strong>Next day</strong> or sync more leagues.</p>
+{% endif %}
+{% endblock %}

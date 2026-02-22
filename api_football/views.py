@@ -273,6 +273,70 @@ def competition_detail(request, pk):
     return render(request, "api_football/competition_detail.html", context)
 
 
+def game_list_today(request):
+    """Fixtures for a given day (default: today) from all downloaded leagues. Supports ?date=YYYY-MM-DD."""
+    from datetime import timedelta, datetime
+
+    today = timezone.localdate()
+    date_str = (request.GET.get("date") or "").strip()
+    if date_str:
+        try:
+            selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            selected_date = today
+    else:
+        selected_date = today
+
+    games_qs = (
+        Game.objects.filter(kickoff__date=selected_date)
+        .select_related("home_team", "away_team", "competition")
+        .order_by("kickoff")
+    )
+    paginator = Paginator(games_qs, 50)
+    page_num = request.GET.get("page", 1)
+    try:
+        page = paginator.page(int(page_num))
+    except (ValueError, TypeError):
+        page = paginator.page(1)
+    games = list(page.object_list)
+
+    game_ml_odds = {}
+    if games and get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
+        base_dir = getattr(settings, "BASE_DIR", None)
+        if base_dir:
+            by_filename = {}
+            for g in games:
+                if not g.competition:
+                    continue
+                fn = get_model_filename_for_competition(g.competition)
+                if fn:
+                    by_filename.setdefault(fn, []).append(g)
+            for _filename, group_list in by_filename.items():
+                model_path = base_dir / _filename
+                if not model_path.exists():
+                    continue
+                for game, lam in predict_lambdas_for_games(group_list, model_path):
+                    p_over = poisson_probabilities(lam).get("prob_over_2_5")
+                    if p_over is not None:
+                        game_ml_odds[game.pk] = {"ml_over_pct": round(100 * p_over), "ml_under_pct": round(100 * (1 - p_over))}
+
+    games_with_ml = [(g, game_ml_odds.get(g.pk)) for g in games]
+
+    context = {
+        "selected_date": selected_date,
+        "today": today,
+        "prev_date": selected_date - timedelta(days=1),
+        "next_date": selected_date + timedelta(days=1),
+        "is_today": selected_date == today,
+        "games": games,
+        "games_with_ml": games_with_ml,
+        "game_ml_odds": game_ml_odds,
+        "page": page,
+        "paginator": paginator,
+    }
+    return render(request, "api_football/game_list_today.html", context)
+
+
 def game_statistics(request, pk):
     """Show match statistics (home vs away) for a finished game."""
     game = get_object_or_404(

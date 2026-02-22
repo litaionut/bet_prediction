@@ -3,7 +3,7 @@
 
 {% block content %}
 <h1>Competitions</h1>
-<p>Countries that have data downloaded (leagues and fixtures). <a href="{% url 'api_football:gemini_predictions' %}" style="color:#58a6ff;">ML Over/Under 2.5 predictions</a></p>
+<p>Countries that have data downloaded (leagues and fixtures). <a href="{% url 'api_football:game_list_today' %}" style="color:#58a6ff;">Today</a> · <a href="{% url 'api_football:gemini_predictions' %}" style="color:#58a6ff;">ML Over/Under 2.5 predictions</a></p>
 
 {% if messages %}
 <ul class="messages" style="list-style:none; padding:0;">

@@ -41,3 +41,10 @@ Alternatively, if Railway provides `DATABASE_URL` for the Postgres service, you 
 ## 5. Optional: custom domain
 
 - In **Networking**, add a custom domain and include that host in `ALLOWED_HOSTS` (or set it via an env var if you extend the app).
+
+## 6. ML Over/Under 2.5 predictions on Railway
+
+ML predictions are only shown if the **trained model file** exists in the app (e.g. `gemini_poisson_218.json`). These files are not in `.gitignore` by default so you can commit them.
+
+- **To show ML on Railway:** train locally (e.g. `python manage.py build_gemini_dataset -c 218 -o gemini_dataset_218.csv` then `python manage.py train_gemini_poisson -d gemini_dataset_218.csv -o gemini_poisson_218.json`), then **add and commit** the `.json` file(s) and push. After deploy, the model will be on Railway and predictions will appear.
+- **Alternative:** run the same training inside Railway after deploy (`railway ssh` then `python manage.py train_gemini_poisson ...`). The model will work until the next redeploy (container filesystem is ephemeral), so for a permanent fix, commit the model to the repo.

@@ -10,6 +10,7 @@ urlpatterns = [
     path("competitions/<int:pk>/", views.competition_detail, name="competition_detail"),
     path("competitions/<int:pk>/delete/", views.competition_delete, name="competition_delete"),
     path("competitions/delete-selected/", views.competition_bulk_delete, name="competition_bulk_delete"),
+    path("games/today/", views.game_list_today, name="game_list_today"),
     path("games/<int:pk>/statistics/", views.game_statistics, name="game_statistics"),
     path("predictions/", views.gemini_predictions, name="gemini_predictions"),
 ]

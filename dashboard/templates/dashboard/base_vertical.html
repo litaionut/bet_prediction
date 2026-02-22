@@ -27,6 +27,7 @@
             <nav>
                 <a href="{% url 'dashboard:index' %}" class="{% if request.resolver_match.url_name == 'index' and request.resolver_match.app_name == 'dashboard' %}active{% endif %}">Dashboard</a>
                 <a href="{% url 'api_football:sync' %}" class="{% if request.resolver_match.app_name == 'api_football' and request.resolver_match.url_name == 'sync' %}active{% endif %}">Sync league data</a>
+                <a href="{% url 'api_football:game_list_today' %}" class="{% if request.resolver_match.app_name == 'api_football' and request.resolver_match.url_name == 'game_list_today' %}active{% endif %}">Today</a>
                 <a href="{% url 'api_football:competition_list' %}" class="{% if request.resolver_match.app_name == 'api_football' and request.resolver_match.url_name == 'competition_list' %}active{% endif %}">Competitions</a>
                 <a href="{% url 'admin:index' %}">Admin</a>
                 <a href="{% url 'health' %}">Health check</a>

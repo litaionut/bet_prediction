@@ -34,6 +34,7 @@ staticfiles/
 .DS_Store
 Thumbs.db
 
-# ML generated
+# ML datasets (large; not needed at runtime)
 gemini_dataset_*.csv
-gemini_poisson*.json
+# Model files (*.json) can be committed so Railway has them; uncomment to ignore:
+# gemini_poisson*.json
