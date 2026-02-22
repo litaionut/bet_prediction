@@ -22,7 +22,7 @@
     <select name="competition" onchange="this.form.submit()" style="background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem; margin-left:0.35rem;">
       <option value="">-- Choose competition --</option>
       {% for c in competitions_list %}
-      <option value="{{ c.pk }}" {% if competition and competition.pk == c.pk %}selected{% endif %}>{{ c.name }} ({{ c.country }})</option>
+      <option value="{{ c.pk }}" {% if competition and competition.pk == c.pk %}selected{% endif %}>{{ c.name }} ({{ c.country }}) — id {{ c.pk }}, api_id {{ c.api_id }}</option>
       {% endfor %}
     </select>
   </form>

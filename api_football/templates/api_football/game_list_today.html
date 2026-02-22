@@ -39,7 +39,7 @@
         {% else %}{{ g.score_display }}{% endif %}
       </td>
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
-      <td style="padding:0.5rem;">{% if g.competition %}<a href="{% url 'api_football:competition_detail' g.competition_id %}" style="color:#58a6ff;">{{ g.competition.name }}</a>{% else %}—{% endif %}</td>
+      <td style="padding:0.5rem;">{% if g.competition %}<a href="{% url 'api_football:competition_detail' g.competition_id %}" style="color:#58a6ff;">{{ g.competition.name }}</a> <span style="color:#6e7681; font-size:0.85rem;">({{ g.competition.api_id }})</span>{% else %}—{% endif %}</td>
       {% if game_ml_odds %}<td style="text-align:center; padding:0.5rem;">{% if ml %}{{ ml.ml_over_pct }}% Over{% else %}—{% endif %}</td>{% endif %}
     </tr>
     {% endfor %}

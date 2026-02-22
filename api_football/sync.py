@@ -56,6 +56,89 @@ def _parse_datetime(s):
         return None
 
 
+def _league_item_to_defaults(item):
+    """Build Competition defaults from one API leagues response item. Returns (api_id, defaults) or (None, None)."""
+    if not item or "league" not in item:
+        return None, None
+    league = item["league"]
+    api_id = league.get("id")
+    if not api_id:
+        return None, None
+    country_val = league.get("country", "")
+    if not country_val and item.get("country"):
+        co = item["country"]
+        country_val = co.get("name", co.get("country", "")) if isinstance(co, dict) else str(co)
+    rank_val = league.get("rank")
+    if rank_val is not None and not isinstance(rank_val, int):
+        try:
+            rank_val = int(rank_val)
+        except (TypeError, ValueError):
+            rank_val = None
+    defaults = {
+        "name": league.get("name", ""),
+        "country": country_val or "",
+        "logo_url": league.get("logo", "") or "",
+        "type": league.get("type", "") or "",
+        "rank": rank_val,
+    }
+    return api_id, defaults
+
+
+def ensure_competition_from_api_item(item):
+    """Create or update a single Competition from one API leagues response item. Returns (competition, was_created)."""
+    api_id, defaults = _league_item_to_defaults(item)
+    if api_id is None:
+        return None, False
+    obj, was_created = Competition.objects.update_or_create(
+        api_id=api_id, defaults=defaults
+    )
+    return obj, was_created
+
+
+def ensure_competition_from_session_dict(d):
+    """Create or update a single Competition from a session league dict (api_id, name, country, type, rank). Returns (competition, was_created)."""
+    if not d or not d.get("api_id"):
+        return None, False
+    defaults = {
+        "name": d.get("name", ""),
+        "country": d.get("country", ""),
+        "logo_url": "",
+        "type": d.get("type", "") or "",
+        "rank": d.get("rank"),
+    }
+    obj, was_created = Competition.objects.update_or_create(
+        api_id=d["api_id"], defaults=defaults
+    )
+    return obj, was_created
+
+
+def league_api_item_to_session_dict(item):
+    """Convert one API leagues response item to a serializable dict for session (api_id, name, country, type, rank)."""
+    if not item or "league" not in item:
+        return None
+    league = item["league"]
+    api_id = league.get("id")
+    if not api_id:
+        return None
+    country_val = league.get("country", "")
+    if not country_val and item.get("country"):
+        co = item["country"]
+        country_val = co.get("name", co.get("country", "")) if isinstance(co, dict) else str(co)
+    rank_val = league.get("rank")
+    if rank_val is not None and not isinstance(rank_val, int):
+        try:
+            rank_val = int(rank_val)
+        except (TypeError, ValueError):
+            rank_val = None
+    return {
+        "api_id": api_id,
+        "name": league.get("name", ""),
+        "country": country_val or "",
+        "type": league.get("type", "") or "",
+        "rank": rank_val,
+    }
+
+
 def sync_leagues(country=None, season=None):
     """Fetch leagues and create/update Competition records. Returns (created, updated)."""
     raw = get_leagues(country=country, season=season)
@@ -63,27 +146,9 @@ def sync_leagues(country=None, season=None):
     for item in raw:
         if not item or "league" not in item:
             continue
-        league = item["league"]
-        api_id = league.get("id")
-        if not api_id:
+        api_id, defaults = _league_item_to_defaults(item)
+        if api_id is None:
             continue
-        country_val = league.get("country", "")
-        if not country_val and item.get("country"):
-            co = item["country"]
-            country_val = co.get("name", co.get("country", "")) if isinstance(co, dict) else str(co)
-        rank_val = league.get("rank")
-        if rank_val is not None and not isinstance(rank_val, int):
-            try:
-                rank_val = int(rank_val)
-            except (TypeError, ValueError):
-                rank_val = None
-        defaults = {
-            "name": league.get("name", ""),
-            "country": country_val or "",
-            "logo_url": league.get("logo", "") or "",
-            "type": league.get("type", "") or "",
-            "rank": rank_val,
-        }
         obj, was_created = Competition.objects.update_or_create(
             api_id=api_id, defaults=defaults
         )

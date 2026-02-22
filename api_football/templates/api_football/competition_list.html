@@ -3,7 +3,7 @@
 
 {% block content %}
 <h1>Competitions</h1>
-<p>Countries that have data downloaded (leagues and fixtures). <a href="{% url 'api_football:game_list_today' %}" style="color:#58a6ff;">Today</a> · <a href="{% url 'api_football:gemini_predictions' %}" style="color:#58a6ff;">ML Over/Under 2.5 predictions</a></p>
+<p>Countries and their leagues (list only). To get fixtures: use <a href="{% url 'api_football:sync' %}" style="color:#58a6ff;">Sync league data</a> → select competitions and year → Download, or open a league and use <strong>Download this league</strong> below. <a href="{% url 'api_football:game_list_today' %}" style="color:#58a6ff;">Today</a> · <a href="{% url 'api_football:gemini_predictions' %}" style="color:#58a6ff;">ML predictions</a></p>
 
 {% if messages %}
 <ul class="messages" style="list-style:none; padding:0;">
@@ -19,16 +19,6 @@
 {% endif %}
 
 {% if countries_with_data %}
-<section style="background:#161b22; padding:1.25rem; border-radius:8px; margin-bottom:1.5rem; border:1px solid #30363d;">
-  <h2 style="margin-top:0; font-size:1.1rem;">Sync fixtures for all downloaded leagues</h2>
-  <p style="font-size:0.9rem; color:#8b949e;">Re-fetch teams and fixtures for the selected season (uses API requests).</p>
-  <form method="post" action="{% url 'api_football:competition_list' %}" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="sync_fixtures">
-    <label>Season year: <input type="number" name="season_year" value="{{ current_year }}" min="2000" max="2100" style="width:5rem; background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem;"></label>
-    <button type="submit">Sync fixtures for all leagues</button>
-  </form>
-</section>
 <ul style="list-style:none; padding:0;">
   {% for row in countries_with_data %}
   <li style="padding:0.75rem 0; border-bottom:1px solid #30363d; display:flex; align-items:center; justify-content:space-between; gap:1rem;">

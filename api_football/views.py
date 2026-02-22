@@ -1,7 +1,9 @@
+from io import StringIO
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
 from django.conf import settings
+from django.core.management import call_command
 from django.core.paginator import Paginator
 from django.db.models import Count
 from django.utils import timezone
@@ -47,35 +49,7 @@ def _country_name_from_slug(slug):
 
 
 def competition_list(request):
-    """List all countries that have competitions (data) downloaded. POST: sync fixtures for all leagues."""
-    if request.method == "POST" and request.POST.get("action") == "sync_fixtures":
-        from .sync import sync_teams_for_league, sync_fixtures
-        year_str = (request.POST.get("season_year") or "").strip()
-        try:
-            year = int(year_str) if year_str else timezone.now().year
-        except (TypeError, ValueError):
-            year = timezone.now().year
-        if year < 2000 or year > 2100:
-            year = timezone.now().year
-        competitions = list(Competition.objects.all().order_by("country", "api_id"))
-        total_teams_c, total_teams_u = 0, 0
-        total_fix_c, total_fix_u = 0, 0
-        for comp in competitions:
-            try:
-                tc, tu = sync_teams_for_league(comp.api_id, year)
-                total_teams_c += tc
-                total_teams_u += tu
-                fc, fu = sync_fixtures(league_id=comp.api_id, season=year)
-                total_fix_c += fc
-                total_fix_u += fu
-            except Exception as e:
-                messages.warning(request, f"{comp.name}: {e}")
-        messages.success(
-            request,
-            f"Synced {len(competitions)} leagues for {year}: teams {total_teams_c} created, {total_teams_u} updated; fixtures {total_fix_c} created, {total_fix_u} updated.",
-        )
-        return redirect("api_football:competition_list")
-
+    """List all countries that have competitions (league list only; no bulk download). Download teams/fixtures per league from Sync or from the league page."""
     qs = (
         Competition.objects.exclude(country="")
         .values("country")
@@ -177,9 +151,91 @@ def competition_bulk_delete(request):
     return redirect("api_football:competition_list")
 
 
+def _run_ml_command(request, competition, step_name, run_build, run_train):
+    """Run build_gemini_dataset and/or train_gemini_poisson for this competition. Return (success, message)."""
+    api_id = getattr(competition, "api_id", None)
+    if api_id is None:
+        return False, "Competition has no api_id."
+    dataset_name = f"gemini_dataset_{api_id}.csv"
+    model_name = f"gemini_poisson_{api_id}.json"
+    out = StringIO()
+    err = StringIO()
+    build_msg = ""
+    train_msg = ""
+    try:
+        if run_build:
+            call_command(
+                "build_gemini_dataset",
+                competition=competition.pk,
+                output=dataset_name,
+                stdout=out,
+                stderr=err,
+            )
+            out.seek(0)
+            build_msg = (out.read() or "").strip() or "Dataset built."
+            if err.getvalue():
+                build_msg += " " + err.getvalue().strip()
+            out.truncate(0)
+            out.seek(0)
+            err.truncate(0)
+            err.seek(0)
+        if run_train:
+            call_command(
+                "train_gemini_poisson",
+                dataset=dataset_name,
+                output=model_name,
+                stdout=out,
+                stderr=err,
+            )
+            out.seek(0)
+            train_msg = (out.read() or "").strip() or "Model saved."
+            if err.getvalue():
+                train_msg += " " + err.getvalue().strip()
+        if run_build and run_train:
+            return True, (build_msg + " " + train_msg).strip()
+        return True, (build_msg if run_build else train_msg).strip()
+    except Exception as e:
+        return False, str(e)
+
+
 def competition_detail(request, pk):
-    """Show one league: seasons and fixtures (upcoming + past)."""
+    """Show one league: seasons and fixtures (upcoming + past). POST action=download_league: download teams + fixtures. POST action=build_dataset/train_model/build_and_train: run ML training."""
     competition = get_object_or_404(Competition, pk=pk)
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "download_league":
+            from .sync import sync_teams_for_league, sync_fixtures
+            years_str = (request.POST.get("years") or request.POST.get("year") or "").strip() or str(timezone.now().year)
+            years = _parse_years(years_str)
+            if not years:
+                messages.warning(request, "Enter at least one valid year (e.g. 2024).")
+                return redirect("api_football:competition_detail", pk=pk)
+            total_tc, total_tu, total_fc, total_fu = 0, 0, 0, 0
+            for year in years:
+                try:
+                    tc, tu = sync_teams_for_league(competition.api_id, year)
+                    total_tc += tc
+                    total_tu += tu
+                    fc, fu = sync_fixtures(league_id=competition.api_id, season=year)
+                    total_fc += fc
+                    total_fu += fu
+                except Exception as e:
+                    messages.warning(request, f"{competition.name} {year}: {e}")
+            messages.success(
+                request,
+                f"Downloaded {competition.name}: teams {total_tc} created, {total_tu} updated; fixtures {total_fc} created, {total_fu} updated.",
+            )
+            return redirect("api_football:competition_detail", pk=pk)
+        if action in ("build_dataset", "train_model", "build_and_train"):
+            run_build = action in ("build_dataset", "build_and_train")
+            run_train = action in ("train_model", "build_and_train")
+            ok, msg = _run_ml_command(request, competition, action, run_build=run_build, run_train=run_train)
+            if ok:
+                messages.success(request, msg)
+            else:
+                messages.error(request, msg)
+            return redirect("api_football:competition_detail", pk=pk)
+
     now = timezone.now()
     season_param = request.GET.get("season")
     try:
@@ -473,16 +529,17 @@ def gemini_predictions(request):
     return render(request, "api_football/gemini_predictions.html", context)
 
 
-from .client import remaining_requests_today
+from .client import get_leagues, remaining_requests_today
 from .sync import (
     sync_countries,
-    sync_leagues,
     sync_teams_for_league,
     sync_fixtures,
     sync_fixture_statistics,
     sync_stats_for_games,
     sync_predictions_for_games,
     sync_odds_for_games,
+    league_api_item_to_session_dict,
+    ensure_competition_from_session_dict,
 )
 
 
@@ -556,33 +613,61 @@ def sync_page(request):
                 if not selected:
                     messages.warning(request, "Select at least one country.")
                     return redirect("api_football:sync")
-                total_c, total_u = 0, 0
+                # Fetch leagues from API only; do not create DB records yet.
+                available = request.session.get("sync_available_leagues") or {}
                 for country_name in selected:
-                    cn, un = sync_leagues(country=country_name)
-                    total_c += cn
-                    total_u += un
-                messages.success(request, f"Leagues: {total_c} created, {total_u} updated. Select competitions and year, then Download.")
+                    raw = get_leagues(country=country_name)
+                    leagues = []
+                    for item in raw:
+                        d = league_api_item_to_session_dict(item)
+                        if d:
+                            leagues.append(d)
+                    if leagues:
+                        available[country_name] = leagues
+                request.session["sync_available_leagues"] = available
+                request.session.modified = True
+                total = sum(len(available.get(c, [])) for c in selected)
+                messages.success(
+                    request,
+                    f"Loaded {total} league(s) from API. Select which to download and click Download (only selected will be created).",
+                )
                 qs = urlencode([("country", n) for n in selected], doseq=True)
                 return redirect(reverse("api_football:sync") + "?" + qs)
             elif action == "download":
-                selected = request.POST.getlist("competition")
+                selected_api_ids = request.POST.getlist("competition")
                 years_str = (request.POST.get("years", "").strip() or request.POST.get("year", "").strip())
-                if not selected or not years_str:
+                if not selected_api_ids or not years_str:
                     messages.warning(request, "Select at least one competition and enter year(s).")
                     return redirect("api_football:sync")
                 years = _parse_years(years_str)
                 if not years:
                     messages.warning(request, "Enter at least one valid year (e.g. 2024 or 2022,2023,2024 or 2020-2024).")
                     return redirect("api_football:sync")
+                selected_api_ids = [int(x) for x in selected_api_ids]
+                # Create Competition only for selected leagues (from session).
+                available = request.session.get("sync_available_leagues") or {}
+                league_by_api_id = {}
+                for country_name, leagues in available.items():
+                    for d in leagues:
+                        league_by_api_id[d["api_id"]] = d
+                missing = [aid for aid in selected_api_ids if aid not in league_by_api_id]
+                if missing:
+                    messages.warning(
+                        request,
+                        "Some selected leagues were not in session (session may have expired). Load competitions again, then download.",
+                    )
                 total_teams_c, total_teams_u = 0, 0
                 total_fix_c, total_fix_u = 0, 0
-                for comp_id in selected:
-                    comp_id = int(comp_id)
+                for api_id in selected_api_ids:
+                    d = league_by_api_id.get(api_id)
+                    if not d:
+                        continue
+                    ensure_competition_from_session_dict(d)
                     for year in years:
-                        tc, tu = sync_teams_for_league(comp_id, year)
+                        tc, tu = sync_teams_for_league(api_id, year)
                         total_teams_c += tc
                         total_teams_u += tu
-                        fc, fu = sync_fixtures(league_id=comp_id, season=year)
+                        fc, fu = sync_fixtures(league_id=api_id, season=year)
                         total_fix_c += fc
                         total_fix_u += fu
                 messages.success(
@@ -633,33 +718,59 @@ def sync_page(request):
     years_param = request.GET.get("years", "").strip() or request.GET.get("year", "2024").strip()
 
     if selected_countries:
-        selected_lower = [s.lower() for s in selected_countries]
-        all_comp_countries = set(
-            Competition.objects.exclude(country="").values_list("country", flat=True).distinct()
-        )
-        matching_countries = [
-            c for c in all_comp_countries
-            if c and c.lower() in selected_lower
-        ]
-        comps = (
-            Competition.objects.filter(country__in=matching_countries)
-            .annotate(game_count=Count("games"))
-            .order_by("country", "rank", "api_id", "name")
-        )
-        competitions_by_country = [
-            (country, list(g), Competition.get_primary_for_country(country))
-            for country, g in groupby(comps, key=lambda c: c.country)
-        ]
-        actual_countries_in_db = (
-            list(
-                Competition.objects.exclude(country="")
-                .values_list("country", flat=True)
-                .distinct()
-                .order_by("country")
+        available = request.session.get("sync_available_leagues") or {}
+        # Prefer list from session (API); enrich with game_count and pk from DB.
+        if available:
+            competitions_by_country = []
+            for country_name in selected_countries:
+                leagues = available.get(country_name, [])
+                if not leagues:
+                    continue
+                # Enrich each league dict with game_count and pk from DB.
+                comps = []
+                for d in sorted(leagues, key=lambda x: (x.get("rank") is None, x.get("rank") or 999, x.get("api_id") or 0, x.get("name", ""))):
+                    obj = Competition.objects.filter(api_id=d["api_id"]).annotate(game_count=Count("games")).first()
+                    comps.append({
+                        "api_id": d["api_id"],
+                        "name": d.get("name", ""),
+                        "type": d.get("type", "") or "",
+                        "country": d.get("country", "") or country_name,
+                        "game_count": obj.game_count if obj else 0,
+                        "pk": obj.pk if obj else None,
+                        "rank": d.get("rank"),
+                    })
+                primary = next((c for c in comps if c.get("rank") == 1), comps[0] if comps else None)
+                competitions_by_country.append((country_name, comps, primary))
+            actual_countries_in_db = []
+        else:
+            # Fallback: show already-downloaded competitions from DB.
+            selected_lower = [s.lower() for s in selected_countries]
+            all_comp_countries = set(
+                Competition.objects.exclude(country="").values_list("country", flat=True).distinct()
             )
-            if not competitions_by_country and selected_countries
-            else []
-        )
+            matching_countries = [
+                c for c in all_comp_countries
+                if c and c.lower() in selected_lower
+            ]
+            comps = (
+                Competition.objects.filter(country__in=matching_countries)
+                .annotate(game_count=Count("games"))
+                .order_by("country", "rank", "api_id", "name")
+            )
+            competitions_by_country = [
+                (country, list(g), Competition.get_primary_for_country(country))
+                for country, g in groupby(comps, key=lambda c: c.country)
+            ]
+            actual_countries_in_db = (
+                list(
+                    Competition.objects.exclude(country="")
+                    .values_list("country", flat=True)
+                    .distinct()
+                    .order_by("country")
+                )
+                if not competitions_by_country and selected_countries
+                else []
+            )
     else:
         competitions_by_country = []
         actual_countries_in_db = []

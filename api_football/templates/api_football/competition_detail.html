@@ -11,9 +11,33 @@
 </p>
 
 <h1>{{ competition.name }}</h1>
+<p style="color:#6e7681; font-size:0.9rem; margin-top:0.25rem;">Competition id: {{ competition.pk }}, api_id: {{ competition.api_id }}</p>
 {% if competition.country or competition.type %}
 <p style="color:#8b949e;">{% if competition.country %}{{ competition.country }}{% endif %}{% if competition.type %} · {{ competition.type }}{% endif %}</p>
 {% endif %}
+
+<section style="background:#161b22; padding:1rem 1.25rem; border-radius:8px; margin:1rem 0; border:1px solid #30363d;">
+  <h2 style="margin:0 0 0.5rem 0; font-size:1rem;">Train ML model (Over/Under 2.5)</h2>
+  <p style="font-size:0.9rem; color:#8b949e; margin:0 0 0.75rem 0;">Build dataset from past games, then train the Poisson model. Predictions will appear on this page and on the predictions list.</p>
+  <form method="post" action="{% url 'api_football:competition_detail' competition.pk %}" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+    {% csrf_token %}
+    <button type="submit" name="action" value="build_dataset">Build dataset</button>
+    <button type="submit" name="action" value="train_model">Train model</button>
+    <button type="submit" name="action" value="build_and_train">Build dataset &amp; train</button>
+  </form>
+  <p style="font-size:0.8rem; color:#6e7681; margin:0.5rem 0 0 0;">Uses <code>gemini_dataset_{{ competition.api_id }}.csv</code> and <code>gemini_poisson_{{ competition.api_id }}.json</code>.</p>
+</section>
+
+<section style="background:#161b22; padding:1rem 1.25rem; border-radius:8px; margin:1rem 0; border:1px solid #30363d;">
+  <h2 style="margin:0 0 0.5rem 0; font-size:1rem;">Download this league</h2>
+  <p style="font-size:0.9rem; color:#8b949e; margin:0 0 0.5rem 0;">Fetch teams and fixtures for the chosen season (uses API requests). Only this league is downloaded.</p>
+  <form method="post" action="{% url 'api_football:competition_detail' competition.pk %}" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="download_league">
+    <label>Season year(s): <input type="text" name="years" value="{{ season_param|default:'' }}" placeholder="e.g. 2024 or 2023,2024" style="width:10rem; background:#0d1117; border:1px solid #30363d; color:#e6edf3; padding:0.35rem;"></label>
+    <button type="submit">Download teams &amp; fixtures</button>
+  </form>
+</section>
 
 {% if seasons %}
 <p style="margin-bottom:1rem;">

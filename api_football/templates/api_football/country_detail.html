@@ -27,6 +27,7 @@
       <span style="background:#238636; color:#fff; font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:4px; margin-right:0.5rem;">Top</span>
       {% endif %}
       <a href="{% url 'api_football:competition_detail' c.pk %}" style="color:#58a6ff; text-decoration:none;">{{ c.name }}</a>
+      <span style="color:#6e7681; font-size:0.85rem;">id={{ c.pk }}, api_id={{ c.api_id }}</span>
       {% if c.type %}<span style="color:#8b949e;"> — {{ c.type }}</span>{% endif %}
       <span style="color:#8b949e;"> ({{ c.game_count }} game{{ c.game_count|pluralize }})</span>
       </label>
