@@ -1,4 +1,5 @@
 from io import StringIO
+from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib import messages
@@ -422,6 +423,29 @@ def journal_add(request):
     ]
     context = {"countries": countries}
     return render(request, "api_football/journal_add.html", context)
+
+
+def cron_update_today_results(request):
+    """
+    Run update_today_results command. Protected by CRON_SECRET (query param or header).
+    For external schedulers (e.g. cron-job.org) to call every hour.
+    """
+    secret = (request.GET.get("secret") or request.headers.get("X-Cron-Secret") or "").strip()
+    expected = (getattr(settings, "CRON_SECRET", None) or "").strip()
+    if not expected or secret != expected:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=403)
+    out = StringIO()
+    err = StringIO()
+    try:
+        call_command("update_today_results", stdout=out, stderr=err)
+        out.seek(0)
+        return JsonResponse({"ok": True, "message": (out.read() or "").strip() or "Done."})
+    except Exception as e:
+        err.seek(0)
+        return JsonResponse(
+            {"ok": False, "error": str(e), "stderr": err.getvalue()},
+            status=500,
+        )
 
 
 def journal_games(request, slug):

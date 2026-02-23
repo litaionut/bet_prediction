@@ -71,3 +71,39 @@ Aplicația salvează și citește fișierele de model (`gemini_poisson_*.json`) 
 ### Variantă fără Volume (modele din repo)
 
 - Antrenezi **local** (pe PC), apoi adaugi în Git fișierele `gemini_poisson_*.json`, faci commit și push. Pe Railway aplicația le citește din cod. Dezavantaj: dacă antrenezi din nou pe Railway, noul model nu se salvează permanent decât dacă folosești Volume (pașii de mai sus).
+
+## 7. Update today's game results every hour
+
+The app can refresh scores and status for today's fixtures from API-Football. A management command runs the update; you schedule it to run every hour.
+
+### Command
+
+```bash
+python manage.py update_today_results
+```
+
+Optional: update a specific date:
+
+```bash
+python manage.py update_today_results --date 2024-02-23
+```
+
+This uses one API request (fixtures by date) and updates or creates `Game` records for that date. Requires `API_FOOTBALL_KEY` and stays within the daily API limit.
+
+### Run every 1 hour on Railway (Cron)
+
+1. In your Railway project, click **+ New** → **Cron Job** (or **Add Service** and choose Cron if available).
+2. Set the **schedule** to every hour, e.g. `0 * * * *` (at minute 0 of every hour).
+3. Set the **command** to run in your app’s environment. If the cron runs in the same project and has access to your app service:
+   - Command: `python manage.py update_today_results`
+   - Ensure the cron service uses the same **Variables** as your app (e.g. `DATABASE_URL`, `API_FOOTBALL_KEY`), or link it to the app service so it inherits them.
+4. Save; Railway will run the command on the schedule.
+
+**Alternative: HTTP endpoint (no Railway Cron needed)**  
+You can trigger the update from an external scheduler (e.g. [cron-job.org](https://cron-job.org)) every hour:
+
+1. In your app **Variables**, add `CRON_SECRET` with a long random string (e.g. a UUID).
+2. In the scheduler, set a request every hour to:
+   `https://YOUR_APP.railway.app/football/cron/update-today-results/?secret=YOUR_CRON_SECRET`
+   (or send the secret in header: `X-Cron-Secret: YOUR_CRON_SECRET`).
+3. A successful run returns `{"ok": true, "message": "..."}`; otherwise 403 (wrong secret) or 500 (API error).

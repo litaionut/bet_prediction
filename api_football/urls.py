@@ -19,4 +19,6 @@ urlpatterns = [
     path("journal/entries/", views.journal_list, name="journal_list"),
     path("journal/record/<int:pk>/", views.journal_record, name="journal_record"),
     path("journal/<slug:slug>/", views.journal_games, name="journal_games"),
+    # Cron: update today's results (call every hour; protect with CRON_SECRET)
+    path("cron/update-today-results/", views.cron_update_today_results, name="cron_update_today_results"),
 ]
