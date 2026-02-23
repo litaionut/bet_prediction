@@ -48,6 +48,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         base = Path(settings.BASE_DIR)
+        models_dir = Path(settings.ML_MODELS_DIR)
         min_games = options["min_games"]
         comp_filter = options.get("competition")
 
@@ -106,7 +107,7 @@ class Command(BaseCommand):
             if not filename:
                 self.stdout.write(self.style.ERROR("  No model filename. Skipped."))
                 continue
-            model_path = base / filename
+            model_path = models_dir / filename
             save_model(model, str(model_path))
             self.stdout.write(self.style.SUCCESS(f"  Model saved: {model_path.name}"))
 

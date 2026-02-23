@@ -42,9 +42,32 @@ Alternatively, if Railway provides `DATABASE_URL` for the Postgres service, you 
 
 - In **Networking**, add a custom domain and include that host in `ALLOWED_HOSTS` (or set it via an env var if you extend the app).
 
-## 6. ML Over/Under 2.5 predictions on Railway
+## 6. Modele ML (Over/Under 2.5) pe Railway – pași clari
 
-ML predictions are only shown if the **trained model file** exists in the app (e.g. `gemini_poisson_218.json`). These files are not in `.gitignore` by default so you can commit them.
+Aplicația salvează și citește fișierele de model (`gemini_poisson_*.json`) dintr-un folder configurat. Pe Railway poți folosi un **Volume** ca acest folder să nu se șteargă la fiecare redeploy și ca modelele să poată fi refăcute/actualizate.
 
-- **To show ML on Railway:** train locally (e.g. `python manage.py build_gemini_dataset -c 218 -o gemini_dataset_218.csv` then `python manage.py train_gemini_poisson -d gemini_dataset_218.csv -o gemini_poisson_218.json`), then **add and commit** the `.json` file(s) and push. After deploy, the model will be on Railway and predictions will appear.
-- **Alternative:** run the same training inside Railway after deploy (`railway ssh` then `python manage.py train_gemini_poisson ...`). The model will work until the next redeploy (container filesystem is ephemeral), so for a permanent fix, commit the model to the repo.
+---
+
+### Pași detaliați (Volume – modele persistente)
+
+**Ce facem:** Creăm un „disc” (Volume) atașat aplicației și îi spunem aplicației să salveze modelele acolo. La redeploy, discul rămâne, deci și modelele.
+
+| Pas | Unde | Ce faci |
+|-----|------|--------|
+| **1** | Dashboard Railway → proiectul tău | Click pe **+ New** (sau **Add Service**). |
+| **2** | Meniul care apare | Alege **Volume** (nu Database, nu GitHub). Se creează un serviciu nou de tip Volume. |
+| **3** | Click pe **Volume-ul** creat | În dreapta vezi setările. La **Mount Path** scrie: `/data` (sau lasă ce propune Railway). Notează acest path. |
+| **4** | Click pe **serviciul tău de aplicație** (cel cu deploy din GitHub, nu Volume, nu Postgres) | E cel care rulează site-ul. |
+| **5** | În serviciul aplicației: tab **Settings** (sau **Variables**) | Caută secțiunea **Volumes** / **Volume Mounts**. |
+| **6** | Secțiunea Volumes | Click **Add Volume** / **Mount**. Alege Volume-ul creat la pasul 2. La **Mount Path** pune același path: `/data`. Salvează. |
+| **7** | Tot în serviciul aplicației: tab **Variables** | Adaugă o variabilă nouă: **Name** = `ML_MODELS_DIR`, **Value** = `/data`. (Exact path-ul de la pasul 3/6.) Salvează. |
+| **8** | Redeploy | Dacă e nevoie, dă **Redeploy** la aplicație. După deploy, aplicația citește și scrie modelele în `/data`. |
+| **9** | Creare/actualizare modele | Din interfața web: mergi la o ligă → **Build dataset** / **Train model**. Sau din Railway: **Settings** → **Deploy** → **Run Command** (dacă există) sau folosești CLI-ul Railway local: `railway run python manage.py train_gemini_poisson -d gemini_dataset_218.csv -o gemini_poisson_218.json`. Fișierele `.json` se salvează pe Volume și **nu se pierd** la redeploy. |
+
+**Rezumat:** Volume = un folder persistent (`/data`). `ML_MODELS_DIR=/data` = aplicația folosește acel folder pentru modele. La antrenament, fișierele merg în `/data` și rămân după redeploy.
+
+---
+
+### Variantă fără Volume (modele din repo)
+
+- Antrenezi **local** (pe PC), apoi adaugi în Git fișierele `gemini_poisson_*.json`, faci commit și push. Pe Railway aplicația le citește din cod. Dezavantaj: dacă antrenezi din nou pe Railway, noul model nu se salvează permanent decât dacă folosești Volume (pașii de mai sus).

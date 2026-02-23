@@ -286,11 +286,11 @@ def competition_detail(request, pk):
     # ML only for games on current page (load model once via predict_lambdas_for_games)
     page_games = upcoming + past
     if page_games and get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
-        base_dir = getattr(settings, "BASE_DIR", None)
-        if base_dir and competition:
+        models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
+        if models_dir and competition:
             filename = get_model_filename_for_competition(competition)
             if filename:
-                model_path = base_dir / filename
+                model_path = models_dir / filename
                 if model_path.exists():
                     for g, lam in predict_lambdas_for_games(page_games, model_path):
                         p_over = poisson_probabilities(lam).get("prob_over_2_5")
@@ -315,11 +315,11 @@ def competition_detail(request, pk):
     # ML accuracy for this league: green (correct) / total past games with prediction
     ml_accuracy = None
     if get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
-        base_dir = getattr(settings, "BASE_DIR", None)
-        if base_dir and competition:
+        models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
+        if models_dir and competition:
             filename = get_model_filename_for_competition(competition)
             if filename:
-                model_path = base_dir / filename
+                model_path = models_dir / filename
                 if model_path.exists():
                     all_past_qs = base_qs.filter(
                         status__in=(Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO)
@@ -534,8 +534,8 @@ def game_list_today(request):
 
     game_ml_odds = {}
     if games and get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
-        base_dir = getattr(settings, "BASE_DIR", None)
-        if base_dir:
+        models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
+        if models_dir:
             by_filename = {}
             for g in games:
                 if not g.competition:
@@ -544,7 +544,7 @@ def game_list_today(request):
                 if fn:
                     by_filename.setdefault(fn, []).append(g)
             for _filename, group_list in by_filename.items():
-                model_path = base_dir / _filename
+                model_path = models_dir / _filename
                 if not model_path.exists():
                     continue
                 for game, lam in predict_lambdas_for_games(group_list, model_path):
@@ -579,7 +579,8 @@ def game_statistics(request, pk):
     if game.competition and get_model_filename_for_competition and predict_lambda_for_game and poisson_probabilities:
         filename = get_model_filename_for_competition(game.competition)
         if filename:
-            model_path = getattr(settings, "BASE_DIR", None) and (settings.BASE_DIR / filename)
+            models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
+            model_path = models_dir and (models_dir / filename)
             if model_path and model_path.exists():
                 lam = predict_lambda_for_game(game, model_path)
                 if lam is not None:
@@ -665,16 +666,17 @@ def gemini_predictions(request):
 
     comp = None
     model_path = None
-    if comp_pk and get_model_filename_for_competition:
+    models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
+    if comp_pk and get_model_filename_for_competition and models_dir:
         comp = Competition.objects.filter(pk=comp_pk).first()
         if comp:
             filename = get_model_filename_for_competition(comp)
             if filename:
-                model_path = getattr(settings, "BASE_DIR", None) and (settings.BASE_DIR / filename)
-    elif get_competition_for_league and get_model_filename_for_league:
+                model_path = models_dir / filename
+    elif get_competition_for_league and get_model_filename_for_league and models_dir:
         comp = get_competition_for_league(league)
         if comp:
-            model_path = getattr(settings, "BASE_DIR", None) and (settings.BASE_DIR / get_model_filename_for_league(league))
+            model_path = models_dir / get_model_filename_for_league(league)
 
     if not comp:
         return render(request, "api_football/gemini_predictions.html", context)

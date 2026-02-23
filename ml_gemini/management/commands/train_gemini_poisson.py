@@ -21,7 +21,7 @@ class Command(BaseCommand):
         if not Path(dataset_path).is_absolute():
             dataset_path = str(settings.BASE_DIR / dataset_path)
         if not Path(output_path).is_absolute():
-            output_path = str(settings.BASE_DIR / output_path)
+            output_path = str(settings.ML_MODELS_DIR / output_path)
         self.stdout.write("Loading dataset...")
         try:
             X, y = load_dataset(dataset_path)

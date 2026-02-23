@@ -18,6 +18,11 @@ import dj_database_url
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ML model files (gemini_poisson_*.json). On Railway, set ML_MODELS_DIR to the Volume mount path
+# (e.g. /data/models) so models persist across deploys and can be updated when retrained.
+_models_dir = (os.environ.get("ML_MODELS_DIR") or "").strip()
+ML_MODELS_DIR = Path(_models_dir) if _models_dir else BASE_DIR
+
 # Load .env from project root (same folder as manage.py)
 _env_path = BASE_DIR / ".env"
 if _env_path.exists():
