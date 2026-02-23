@@ -13,4 +13,10 @@ urlpatterns = [
     path("games/today/", views.game_list_today, name="game_list_today"),
     path("games/<int:pk>/statistics/", views.game_statistics, name="game_statistics"),
     path("predictions/", views.gemini_predictions, name="gemini_predictions"),
+    # Bet journal: list + Add new entry → country → games (last 48h) → over/under → save
+    path("journal/", views.journal_index, name="journal_index"),
+    path("journal/add/", views.journal_add, name="journal_add"),
+    path("journal/entries/", views.journal_list, name="journal_list"),
+    path("journal/record/<int:pk>/", views.journal_record, name="journal_record"),
+    path("journal/<slug:slug>/", views.journal_games, name="journal_games"),
 ]

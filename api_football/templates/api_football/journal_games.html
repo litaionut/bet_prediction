@@ -1,0 +1,43 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}{% if country_name %}{{ country_name }} – Journal{% else %}Journal{% endif %} – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;"><a href="{% url 'api_football:journal_index' %}" style="color:#8b949e;">← Journal</a></p>
+
+{% if not country_name %}
+<p>Country not found.</p>
+{% else %}
+<h1>{{ country_name }}</h1>
+<p>Games ended in the last 48 hours. Select a game to record your Over 2.5 / Under 2.5 bet; the journal will save it as a win or a loss based on the result.</p>
+<p><a href="{% url 'api_football:journal_add' %}" style="color:#8b949e;">← Change country</a></p>
+
+{% if games_with_recorded %}
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Date</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Match</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Score</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">League</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for game, recorded in games_with_recorded %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.75rem; color:#8b949e;">{{ game.kickoff|date:"M d, H:i" }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ game.home_team.name }} – {{ game.away_team.name }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ game.score_display }}</td>
+      <td style="padding:0.5rem 0.75rem; color:#8b949e;">{{ game.competition.name|default:"—" }}</td>
+      <td style="padding:0.5rem 0.75rem;">
+        <a href="{% url 'api_football:journal_record' game.pk %}" style="color:#58a6ff;">{% if recorded %}Edit bet{% else %}Record bet{% endif %}</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#8b949e;">No games ended in the last 48 hours for this country. Try another country or sync more fixtures.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -8,10 +8,11 @@ from django.core.paginator import Paginator
 from django.db.models import Count
 from django.utils import timezone
 from django.utils.text import slugify
+from datetime import timedelta
 from urllib.parse import urlencode
 from itertools import groupby
 
-from .models import Country, Competition, Game, GameStatistics
+from .models import Country, Competition, Game, GameStatistics, BetJournalEntry
 
 # Optional ML Over/Under 2.5 (Poisson); avoid import errors if deps missing
 try:
@@ -369,6 +370,139 @@ def competition_detail(request, pk):
         "past_paginator": past_paginator,
     }
     return render(request, "api_football/competition_detail.html", context)
+
+
+def _finished_game_statuses():
+    return (Game.Status.FT, Game.Status.AET, Game.Status.AWD, Game.Status.WO)
+
+
+def journal_index(request):
+    """Journal tab: show recorded entries first, with 'Add new entry' button above."""
+    entries = list(
+        BetJournalEntry.objects.select_related("game__home_team", "game__away_team", "game__competition")
+        .order_by("-created_at")[:200]
+    )
+    wins = sum(1 for e in entries if e.result == BetJournalEntry.Result.WIN)
+    losses = sum(1 for e in entries if e.result == BetJournalEntry.Result.LOSS)
+    context = {
+        "entries": entries,
+        "wins": wins,
+        "losses": losses,
+        "total": len(entries),
+    }
+    return render(request, "api_football/journal_index.html", context)
+
+
+def journal_add(request):
+    """Add new entry: step 1 – select country (dropdown). POST redirects to games list for that country."""
+    if request.method == "POST":
+        country_slug = (request.POST.get("country_slug") or "").strip()
+        if country_slug:
+            return redirect("api_football:journal_games", slug=country_slug)
+        messages.warning(request, "Please select a country.")
+    # Countries that have at least one finished game in the last 48 hours
+    cutoff = timezone.now() - timedelta(hours=48)
+    qs = (
+        Competition.objects.exclude(country="")
+        .filter(
+            games__status__in=_finished_game_statuses(),
+            games__kickoff__gte=cutoff,
+        )
+        .values("country")
+        .annotate(finished_count=Count("games", distinct=True))
+        .order_by("country")
+    )
+    countries = [
+        {
+            "country": row["country"],
+            "slug": slugify(row["country"]) or row["country"].lower().replace(" ", "-"),
+            "finished_count": row["finished_count"],
+        }
+        for row in qs
+    ]
+    context = {"countries": countries}
+    return render(request, "api_football/journal_add.html", context)
+
+
+def journal_games(request, slug):
+    """List finished games for the selected country that ended in the last 48 hours."""
+    country_name = _country_name_from_slug(slug)
+    if not country_name:
+        return render(
+            request,
+            "api_football/journal_games.html",
+            {"country_name": None, "country_slug": slug, "games_with_recorded": []},
+        )
+    cutoff = timezone.now() - timedelta(hours=48)
+    games = (
+        Game.objects.filter(
+            competition__country=country_name,
+            status__in=_finished_game_statuses(),
+            kickoff__gte=cutoff,
+        )
+        .select_related("home_team", "away_team", "competition")
+        .order_by("-kickoff")
+    )
+    # Mark which games already have a journal entry
+    game_ids = [g.pk for g in games]
+    recorded_ids = set(
+        BetJournalEntry.objects.filter(game_id__in=game_ids).values_list("game_id", flat=True)
+    )
+    games_with_recorded = [(g, g.pk in recorded_ids) for g in games]
+    context = {
+        "country_name": country_name,
+        "country_slug": slug,
+        "games": games,
+        "games_with_recorded": games_with_recorded,
+    }
+    return render(request, "api_football/journal_games.html", context)
+
+
+def journal_record(request, pk):
+    """Record a bet for a finished game: choose Over 2.5 or Under 2.5; save as win or loss from the result."""
+    game = get_object_or_404(
+        Game.objects.select_related("home_team", "away_team", "competition"), pk=pk
+    )
+    if not game.is_finished():
+        messages.warning(request, "You can only record bets for finished games.")
+        return redirect("api_football:journal_index")
+
+    existing = getattr(game, "journal_entry", None)
+
+    if request.method == "POST":
+        choice_str = (request.POST.get("choice") or "").strip().lower()
+        if choice_str not in (BetJournalEntry.Choice.OVER, BetJournalEntry.Choice.UNDER):
+            messages.warning(request, "Select Over 2.5 or Under 2.5.")
+            return redirect("api_football:journal_record", pk=pk)
+        total_goals = (game.home_goals or 0) + (game.away_goals or 0)
+        result = BetJournalEntry.compute_result(total_goals, choice_str)
+        if result is None:
+            messages.error(request, "Cannot compute result: score missing.")
+            return redirect("api_football:journal_record", pk=pk)
+        if existing:
+            existing.choice = choice_str
+            existing.result = result
+            existing.save()
+            messages.success(request, f"Updated: you bet {existing.get_choice_display()} → {existing.get_result_display()}.")
+        else:
+            BetJournalEntry.objects.create(game=game, choice=choice_str, result=result)
+            messages.success(request, f"Saved: you bet {choice_str} → {result}.")
+        return redirect("api_football:journal_index")
+
+    country_slug = ""
+    if game.competition and game.competition.country:
+        country_slug = slugify(game.competition.country) or game.competition.country.lower().replace(" ", "-")
+    context = {
+        "game": game,
+        "existing": existing,
+        "country_slug": country_slug,
+    }
+    return render(request, "api_football/journal_record.html", context)
+
+
+def journal_list(request):
+    """Redirect to main Journal tab (index shows the list). Kept for backwards compatibility."""
+    return redirect("api_football:journal_index")
 
 
 def game_list_today(request):

@@ -147,6 +147,43 @@ class GamePrediction(models.Model):
         return f"Prediction for {self.game}"
 
 
+class BetJournalEntry(models.Model):
+    """User's recorded bet: Over/Under 2.5 for a finished game. Result (win/loss) is computed from the score."""
+    class Choice(models.TextChoices):
+        OVER = "over", "Over 2.5"
+        UNDER = "under", "Under 2.5"
+
+    class Result(models.TextChoices):
+        WIN = "win", "Win"
+        LOSS = "loss", "Loss"
+
+    game = models.OneToOneField(
+        Game, on_delete=models.CASCADE, related_name="journal_entry", unique=True
+    )
+    choice = models.CharField(max_length=10, choices=Choice.choices)
+    result = models.CharField(max_length=10, choices=Result.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "bet journal entry"
+        verbose_name_plural = "bet journal entries"
+
+    def __str__(self):
+        return f"{self.game}: {self.get_choice_display()} → {self.get_result_display()}"
+
+    @staticmethod
+    def compute_result(total_goals, choice):
+        """Given total goals and user choice (over/under), return win or loss."""
+        if total_goals is None:
+            return None
+        actual_over = total_goals > 2.5
+        if choice == BetJournalEntry.Choice.OVER:
+            return BetJournalEntry.Result.WIN if actual_over else BetJournalEntry.Result.LOSS
+        else:
+            return BetJournalEntry.Result.WIN if not actual_over else BetJournalEntry.Result.LOSS
+
+
 class APIRequestLog(models.Model):
     """Track API-Football requests per day (e.g. 7500/day limit)."""
     date = models.DateField(unique=True, db_index=True)

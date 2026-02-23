@@ -1,0 +1,53 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}Journal – Bet Prediction{% endblock %}
+
+{% block content %}
+<h1>Journal</h1>
+
+<p style="margin-bottom:1rem;">
+  <a href="{% url 'api_football:journal_add' %}" style="display:inline-block; background:#238636; color:#fff; text-decoration:none; padding:0.5rem 1rem; border-radius:6px; font-weight:500;">Add new entry</a>
+</p>
+
+{% if messages %}
+<ul class="messages" style="list-style:none; padding:0;">
+  {% for message in messages %}
+  <li style="padding:0.5rem 0.75rem; margin-bottom:0.5rem; border-radius:4px;
+    {% if message.tags == 'error' %}background:#3d1f1f; color:#f88;{% endif %}
+    {% if message.tags == 'success' %}background:#1f3d1f; color:#8f8;{% endif %}
+    {% if message.tags == 'warning' %}background:#3d3d1f; color:#cc8;{% endif %}">
+    {{ message }}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if total > 0 %}
+<p style="margin:1rem 0;">Summary: <strong style="color:#3fb950;">{{ wins }} win{{ wins|pluralize }}</strong>, <strong style="color:#f85149;">{{ losses }} loss{{ losses|pluralize }}</strong> ({{ total }} total).</p>
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Date</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Match</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Score</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Your bet</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Result</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in entries %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.75rem; color:#8b949e;">{{ e.created_at|date:"M d, Y" }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ e.game.home_team.name }} – {{ e.game.away_team.name }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ e.game.score_display }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ e.get_choice_display }}</td>
+      <td style="padding:0.5rem 0.75rem;">
+        {% if e.result == 'win' %}<span style="color:#3fb950;">Win</span>{% else %}<span style="color:#f85149;">Loss</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#8b949e;">No bets recorded yet. Click <strong>Add new entry</strong> above to record your first bet (select a country, then a game that ended in the last 48 hours, then Over/Under 2.5).</p>
+{% endif %}
+{% endblock %}

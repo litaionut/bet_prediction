@@ -1,0 +1,36 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}Add new entry – Journal – Bet Prediction{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1rem;"><a href="{% url 'api_football:journal_index' %}" style="color:#8b949e;">← Journal</a></p>
+
+<h1>Add new entry</h1>
+<p style="margin-bottom:1rem;">Select a country to see games that ended in the last 48 hours. Then choose a game and record your Over/Under 2.5 bet.</p>
+
+{% if messages %}
+<ul class="messages" style="list-style:none; padding:0; margin-bottom:1rem;">
+  {% for message in messages %}
+  <li style="padding:0.5rem 0.75rem; border-radius:4px;
+    {% if message.tags == 'warning' %}background:#3d3d1f; color:#cc8;{% endif %}">{{ message }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if countries %}
+<form method="post" action="{% url 'api_football:journal_add' %}">
+  {% csrf_token %}
+  <p style="margin-bottom:0.5rem;"><label for="country_slug">Country</label></p>
+  <select name="country_slug" id="country_slug" style="min-width:220px; padding:0.5rem 0.75rem; background:#21262d; border:1px solid #30363d; border-radius:6px; color:#e6edf3;">
+    <option value="">-- Select country --</option>
+    {% for row in countries %}
+    <option value="{{ row.slug }}">{{ row.country }} ({{ row.finished_count }} game{{ row.finished_count|pluralize }})</option>
+    {% endfor %}
+  </select>
+  <p style="margin-top:1rem;">
+    <button type="submit" style="background:#238636; color:#fff; border:none; padding:0.5rem 1rem; border-radius:6px; cursor:pointer;">Show games</button>
+  </p>
+</form>
+{% else %}
+<p style="color:#8b949e;">No countries with finished games in the last 48 hours. Use <a href="{% url 'api_football:sync' %}" style="color:#58a6ff;">Sync league data</a> to download fixtures; games must have finished to appear here.</p>
+{% endif %}
+{% endblock %}

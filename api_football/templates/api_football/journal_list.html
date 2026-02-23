@@ -1,0 +1,37 @@
+{% extends "dashboard/base_vertical.html" %}
+{% block title %}Journal entries – Bet Prediction{% endblock %}
+
+{% block content %}
+<h1>Journal entries</h1>
+<p><a href="{% url 'api_football:journal_index' %}" style="color:#58a6ff;">← Back to Journal</a></p>
+
+{% if total > 0 %}
+<p style="margin:1rem 0;">Summary: <strong style="color:#3fb950;">{{ wins }} win{{ wins|pluralize }}</strong>, <strong style="color:#f85149;">{{ losses }} loss{{ losses|pluralize }}</strong> ({{ total }} total).</p>
+<table style="width:100%; border-collapse:collapse;">
+  <thead>
+    <tr style="border-bottom:1px solid #30363d;">
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Date</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Match</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Score</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Your bet</th>
+      <th style="text-align:left; padding:0.5rem 0.75rem;">Result</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in entries %}
+    <tr style="border-bottom:1px solid #21262d;">
+      <td style="padding:0.5rem 0.75rem; color:#8b949e;">{{ e.created_at|date:"M d, Y" }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ e.game.home_team.name }} – {{ e.game.away_team.name }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ e.game.score_display }}</td>
+      <td style="padding:0.5rem 0.75rem;">{{ e.get_choice_display }}</td>
+      <td style="padding:0.5rem 0.75rem;">
+        {% if e.result == 'win' %}<span style="color:#3fb950;">Win</span>{% else %}<span style="color:#f85149;">Loss</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#8b949e;">No bets recorded yet. <a href="{% url 'api_football:journal_index' %}" style="color:#58a6ff;">Select a country and a game</a> to record your first bet.</p>
+{% endif %}
+{% endblock %}
