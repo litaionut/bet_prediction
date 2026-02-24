@@ -1,0 +1,113 @@
+{% extends "dashboard/base_vertical.html" %}
+
+{% block title %}Betting Calculator · Bet Prediction{% endblock %}
+
+{% block content %}
+<h1>Betting calculator</h1>
+<p>Set the profit you want to take home and the decimal odds you can get. The tool will tell you the stake you need to place.</p>
+
+<div class="calculator">
+    <label>
+        Desired profit
+        <div class="input-wrapper">
+            <span>€</span>
+            <input id="desiredWin" type="number" min="0" step="0.01" placeholder="100" />
+        </div>
+    </label>
+    <label>
+        Decimal odds
+        <input id="odds" type="number" min="1.01" step="0.01" placeholder="2.25" />
+    </label>
+    <div class="result" id="result">
+        Required stake: <strong>—</strong>
+        <small id="extra"></small>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+{{ block.super }}
+<style>
+    .calculator {
+        margin-top: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 1.5rem;
+        max-width: 460px;
+    }
+    label { display: flex; flex-direction: column; gap: 0.4rem; font-weight: 500; }
+    .input-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 0.5rem 0.75rem;
+    }
+    .input-wrapper span { color: #8b949e; }
+    input[type="number"] {
+        width: 100%;
+        padding: 0.6rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        background: #0d1117;
+        color: #e6edf3;
+        font-size: 1rem;
+    }
+    input[type="number"]:focus { outline: none; border-color: #58a6ff; box-shadow: 0 0 0 1px rgba(88,166,255,0.4); }
+    .input-wrapper input { padding: 0; border: none; box-shadow: none; }
+    .result {
+        margin-top: 0.5rem;
+        font-size: 1.1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .result strong { font-size: 1.5rem; color: #58d68d; }
+    .result small { color: #8b949e; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script>
+    const desiredWinInput = document.getElementById("desiredWin");
+    const oddsInput = document.getElementById("odds");
+    const resultEl = document.getElementById("result");
+    const extraEl = document.getElementById("extra");
+
+    function formatCurrency(value) {
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" }).format(value);
+    }
+
+    function updateResult() {
+        const desiredWin = parseFloat(desiredWinInput.value);
+        const odds = parseFloat(oddsInput.value);
+
+        if (!desiredWin || !odds || odds <= 1) {
+            resultEl.querySelector("strong").textContent = "—";
+            extraEl.textContent = "";
+            return;
+        }
+
+        const stake = desiredWin / (odds - 1);
+        if (!isFinite(stake) || stake <= 0) {
+            resultEl.querySelector("strong").textContent = "—";
+            extraEl.textContent = "";
+            return;
+        }
+
+        const totalReturn = stake * odds;
+        resultEl.querySelector("strong").textContent = formatCurrency(stake);
+        extraEl.textContent = `Total return: ${formatCurrency(totalReturn)} (profit ${formatCurrency(totalReturn - stake)})`;
+    }
+
+    desiredWinInput.addEventListener("input", updateResult);
+    oddsInput.addEventListener("input", updateResult);
+</script>
+{% endblock %}

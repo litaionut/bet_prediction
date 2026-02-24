@@ -6,4 +6,5 @@ app_name = "dashboard"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("betting-calculator/", views.betting_calculator, name="betting_calculator"),
 ]
