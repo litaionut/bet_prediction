@@ -13,6 +13,13 @@ class Command(BaseCommand):
         parser.add_argument("-l", "--league", default=None, help="League slug: premier, laliga, ligue1.")
         parser.add_argument("-c", "--competition", type=int, default=None, metavar="ID", help="Competition pk or api_id.")
         parser.add_argument("-o", "--output", default=None, help="Output CSV path.")
+        parser.add_argument(
+            "--limit",
+            type=int,
+            default=None,
+            metavar="N",
+            help="Use only the last N finished games (default: all). Use 500 for big leagues so UI build completes in time.",
+        )
 
     def handle(self, *args, **options):
         league = options.get("league") or "premier"
@@ -33,10 +40,13 @@ class Command(BaseCommand):
         if not output_path.is_absolute():
             output_path = settings.BASE_DIR / output_path
 
+        limit = options.get("limit")
+        if limit:
+            self.stdout.write("Using last %d finished games (--limit)." % limit)
         if comp_id_or_api is not None:
-            rows = list(build_dataset_rows(comp.id, output_path=str(output_path)))
+            rows = list(build_dataset_rows(comp.id, output_path=str(output_path), limit=limit))
         else:
-            rows, comp = get_league_dataset(league, output_path=str(output_path))
+            rows, comp = get_league_dataset(league, output_path=str(output_path), limit=limit)
             if not comp:
                 self.stdout.write(self.style.WARNING("League not found. Use -c <competition_id>."))
                 return

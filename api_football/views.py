@@ -170,6 +170,7 @@ def _run_ml_command(request, competition, step_name, run_build, run_train):
                 "build_gemini_dataset",
                 competition=competition.pk,
                 output=dataset_name,
+                limit=800,
                 stdout=out,
                 stderr=err,
             )

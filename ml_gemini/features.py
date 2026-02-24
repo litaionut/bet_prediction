@@ -288,29 +288,35 @@ def get_model_filename_for_competition(competition):
     return None
 
 
-def get_league_dataset(league_slug, output_path=None):
+def get_league_dataset(league_slug, output_path=None, limit=None):
     """Build dataset for a league (premier, laliga, ...). Returns (list of rows, competition or None)."""
     comp = get_competition_for_league(league_slug)
     if not comp:
         return [], None
-    rows = list(build_dataset_rows(comp.id, output_path=output_path))
+    rows = list(build_dataset_rows(comp.id, output_path=output_path, limit=limit))
     return rows, comp
 
 
-def build_dataset_rows(competition_id, output_path=None):
+def build_dataset_rows(competition_id, output_path=None, limit=None):
     """
     Iterate finished games for competition chronologically; yield one row per game
     with POISSON_FEATURE_COLUMNS + target. Optionally write CSV to output_path.
+    If limit is set, use only the last `limit` games (by kickoff) to keep build time low for big leagues.
     """
-    games = (
+    qs = (
         Game.objects.filter(
             competition_id=competition_id,
             status__in=FINISHED_STATUSES,
             kickoff__isnull=False,
         )
         .select_related("home_team", "away_team", "competition")
-        .order_by("kickoff")
     )
+    if limit:
+        # Last N games by kickoff, then process in chronological order
+        games = list(qs.order_by("-kickoff")[:limit])
+        games.reverse()
+    else:
+        games = list(qs.order_by("kickoff"))
     fieldnames = POISSON_FEATURE_COLUMNS + [POISSON_TARGET_COLUMN, "is_over_2_5"]
     csv_file = None
     if output_path:
