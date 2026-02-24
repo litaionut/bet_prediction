@@ -18,7 +18,7 @@ class Command(BaseCommand):
             type=int,
             default=None,
             metavar="N",
-            help="Use only the last N finished games (default: all). Use 500 for big leagues so UI build completes in time.",
+            help="Use only the last N finished games (default: all). Use 600 for big leagues so UI build completes in time.",
         )
 
     def handle(self, *args, **options):
