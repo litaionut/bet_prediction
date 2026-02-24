@@ -736,7 +736,8 @@ def gemini_predictions(request):
     elif get_competition_for_league and get_model_filename_for_league and models_dir:
         comp = get_competition_for_league(league)
         if comp:
-            model_path = models_dir / get_model_filename_for_league(league)
+            filename = get_model_filename_for_competition(comp) if get_model_filename_for_competition else None
+            model_path = (models_dir / filename) if filename else None
 
     if not comp:
         return render(request, "api_football/gemini_predictions.html", context)

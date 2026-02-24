@@ -279,12 +279,13 @@ def get_model_filename_for_competition(competition):
     """Return model filename for a competition (slug-based or gemini_poisson_{api_id}.json)."""
     if not competition:
         return None
-    slug = get_league_slug_for_competition(competition)
-    if slug is not None:
-        return get_model_filename_for_league(slug)
     api_id = getattr(competition, "api_id", None)
     if api_id is not None:
         return f"gemini_poisson_{api_id}.json"
+    # Backward-compatibility: if a competition has no api_id, fall back to slug-based naming.
+    slug = get_league_slug_for_competition(competition)
+    if slug is not None:
+        return get_model_filename_for_league(slug)
     return None
 
 
