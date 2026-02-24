@@ -529,6 +529,31 @@ def journal_list(request):
     return redirect("api_football:journal_index")
 
 
+def sync_day_results(request):
+    """Sync results from API-Football for a given date, then redirect back to that day's game list."""
+    from datetime import datetime
+
+    date_str = (request.POST.get("date") or request.GET.get("date") or "").strip()
+    if not date_str:
+        messages.warning(request, "No date provided.")
+        return redirect("api_football:game_list_today")
+    try:
+        selected_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        messages.warning(request, "Invalid date format.")
+        return redirect("api_football:game_list_today")
+    try:
+        from .sync import sync_fixtures
+        created, updated = sync_fixtures(league_id=None, season=None, date_str=date_str)
+        messages.success(request, "Results for %s: %d created, %d updated." % (date_str, created, updated))
+    except ValueError as e:
+        messages.error(request, str(e))
+    except Exception as e:
+        messages.error(request, "Sync failed: %s" % e)
+    url = reverse("api_football:game_list_today") + "?date=" + date_str
+    return redirect(url)
+
+
 def game_list_today(request):
     """Fixtures for a given day (default: today) from all downloaded leagues. Supports ?date=YYYY-MM-DD."""
     from datetime import timedelta, datetime
@@ -576,7 +601,17 @@ def game_list_today(request):
                     if p_over is not None:
                         game_ml_odds[game.pk] = {"ml_over_pct": round(100 * p_over), "ml_under_pct": round(100 * (1 - p_over))}
 
-    games_with_ml = [(g, game_ml_odds.get(g.pk)) for g in games]
+    # For finished games with ML: green = correct prediction, red = wrong
+    games_with_ml = []
+    for g in games:
+        ml = game_ml_odds.get(g.pk)
+        ml_correct = None
+        if ml is not None and g.is_finished():
+            total_goals = (g.home_goals or 0) + (g.away_goals or 0)
+            actual_over = total_goals > 2.5
+            predicted_over = ml["ml_over_pct"] >= 50
+            ml_correct = actual_over == predicted_over
+        games_with_ml.append((g, ml, ml_correct))
 
     context = {
         "selected_date": selected_date,

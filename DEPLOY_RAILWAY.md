@@ -72,9 +72,9 @@ Aplicația salvează și citește fișierele de model (`gemini_poisson_*.json`) 
 
 - Antrenezi **local** (pe PC), apoi adaugi în Git fișierele `gemini_poisson_*.json`, faci commit și push. Pe Railway aplicația le citește din cod. Dezavantaj: dacă antrenezi din nou pe Railway, noul model nu se salvează permanent decât dacă folosești Volume (pașii de mai sus).
 
-## 7. Update today's game results every hour
+## 7. Update game results every hour (today + yesterday)
 
-The app can refresh scores and status for today's fixtures from API-Football. A management command runs the update; you schedule it to run every hour.
+The app can refresh scores and status from API-Football. A management command syncs **today and yesterday** by default (so yesterday's final scores are updated too). Schedule it to run every hour.
 
 ### Command
 
@@ -82,13 +82,10 @@ The app can refresh scores and status for today's fixtures from API-Football. A 
 python manage.py update_today_results
 ```
 
-Optional: update a specific date:
+This runs **two** API requests (one per date) and updates or creates `Game` records. Optional:
 
-```bash
-python manage.py update_today_results --date 2024-02-23
-```
-
-This uses one API request (fixtures by date) and updates or creates `Game` records for that date. Requires `API_FOOTBALL_KEY` and stays within the daily API limit.
+- Only today: `python manage.py update_today_results --today-only`
+- Single date: `python manage.py update_today_results --date 2024-02-23`
 
 ### Run every 1 hour on Railway (Cron)
 

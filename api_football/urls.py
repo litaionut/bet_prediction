@@ -12,6 +12,7 @@ urlpatterns = [
     path("competitions/delete-selected/", views.competition_bulk_delete, name="competition_bulk_delete"),
     path("games/today/", views.game_list_today, name="game_list_today"),
     path("games/<int:pk>/statistics/", views.game_statistics, name="game_statistics"),
+    path("sync-day-results/", views.sync_day_results, name="sync_day_results"),
     path("predictions/", views.gemini_predictions, name="gemini_predictions"),
     # Bet journal: list + Add new entry → country → games (last 48h) → over/under → save
     path("journal/", views.journal_index, name="journal_index"),

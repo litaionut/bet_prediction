@@ -14,7 +14,24 @@
   {% if not is_today %}
   <a href="{% url 'api_football:game_list_today' %}" style="color:#58a6ff;">Go to today</a>
   {% endif %}
+  <form method="post" action="/football/sync-day-results/" style="display:inline; margin:0;">
+    {% csrf_token %}
+    <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+    <button type="submit" style="background:#238636; color:#fff; border:none; padding:0.4rem 0.75rem; border-radius:6px; cursor:pointer; font-size:0.9rem;">Sync results for this day</button>
+  </form>
 </p>
+{% if messages %}
+<ul class="messages" style="list-style:none; padding:0; margin-bottom:0.5rem;">
+  {% for message in messages %}
+  <li style="padding:0.5rem 0.75rem; border-radius:4px;
+    {% if message.tags == 'error' %}background:#3d1f1f; color:#f88;{% endif %}
+    {% if message.tags == 'success' %}background:#1f3d1f; color:#8f8;{% endif %}
+    {% if message.tags == 'warning' %}background:#3d3d1f; color:#cc8;{% endif %}">
+    {{ message }}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
 
 {% if games %}
 <table style="width:100%; border-collapse:collapse;">
@@ -29,7 +46,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for g, ml in games_with_ml %}
+    {% for g, ml, ml_correct in games_with_ml %}
     <tr style="border-bottom:1px solid #21262d;">
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{% if g.kickoff %}{{ g.kickoff|date:"H:i" }}{% else %}—{% endif %}</td>
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
@@ -40,7 +57,11 @@
       </td>
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
       <td style="padding:0.5rem;">{% if g.competition %}<a href="{% url 'api_football:competition_detail' g.competition_id %}" style="color:#58a6ff;">{{ g.competition.name }}</a> <span style="color:#6e7681; font-size:0.85rem;">({{ g.competition.api_id }})</span>{% else %}—{% endif %}</td>
-      {% if game_ml_odds %}<td style="text-align:center; padding:0.5rem;">{% if ml %}{{ ml.ml_over_pct }}% Over{% else %}—{% endif %}</td>{% endif %}
+      {% if game_ml_odds %}
+      <td style="text-align:center; padding:0.5rem; {% if ml_correct == True %}background:#1a3d1a; color:#7ee787;{% elif ml_correct == False %}background:#3d1a1a; color:#f85149;{% endif %}">
+        {% if ml %}{{ ml.ml_over_pct }}% Over{% if g.is_finished and ml_correct != None %}{% if ml_correct %} ✓{% else %} ✗{% endif %}{% endif %}{% else %}—{% endif %}
+      </td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
