@@ -10,7 +10,7 @@
     <label>
         Desired profit
         <div class="input-wrapper">
-            <span>€</span>
+            <span>RON</span>
             <input id="desiredWin" type="number" min="0" step="0.01" placeholder="100" />
         </div>
     </label>
@@ -82,7 +82,7 @@
     const extraEl = document.getElementById("extra");
 
     function formatCurrency(value) {
-        return new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" }).format(value);
+        return new Intl.NumberFormat(undefined, { style: "currency", currency: "RON" }).format(value);
     }
 
     function updateResult() {
