@@ -22,17 +22,27 @@ try:
         get_model_filename_for_competition,
         get_model_filename_for_league,
         get_competition_for_league,
+        get_xg_model_filename_for_competition,
+        get_xg_model_filename_for_league,
     )
     from ml_gemini.poisson_model import predict_lambda_for_game, predict_lambdas_for_games
     from ml_gemini.poisson_probability import poisson_probabilities
+    from ml_gemini.xg_classifier import (
+        predict_probability_for_game,
+        predict_probabilities_for_games,
+    )
 except Exception:
     get_game_features = None
     get_model_filename_for_competition = None
     get_model_filename_for_league = None
     get_competition_for_league = None
+    get_xg_model_filename_for_competition = None
+    get_xg_model_filename_for_league = None
     predict_lambda_for_game = None
     predict_lambdas_for_games = None
     poisson_probabilities = None
+    predict_probability_for_game = None
+    predict_probabilities_for_games = None
 
 
 def _country_name_from_slug(slug):
@@ -719,12 +729,14 @@ def gemini_predictions(request):
         "games_with_prediction": [],
         "competition": None,
         "model_available": False,
+        "xg_model_available": False,
         "league": league,
         "competitions_list": competitions_list,
     }
 
     comp = None
     model_path = None
+    xg_model_path = None
     models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
     if comp_pk and get_model_filename_for_competition and models_dir:
         comp = Competition.objects.filter(pk=comp_pk).first()
@@ -732,15 +744,24 @@ def gemini_predictions(request):
             filename = get_model_filename_for_competition(comp)
             if filename:
                 model_path = models_dir / filename
+            if get_xg_model_filename_for_competition:
+                xg_filename = get_xg_model_filename_for_competition(comp)
+                if xg_filename:
+                    xg_model_path = models_dir / xg_filename
     elif get_competition_for_league and get_model_filename_for_league and models_dir:
         comp = get_competition_for_league(league)
         if comp:
             filename = get_model_filename_for_competition(comp) if get_model_filename_for_competition else None
             model_path = (models_dir / filename) if filename else None
+            if get_xg_model_filename_for_competition:
+                xg_filename = get_xg_model_filename_for_competition(comp)
+                if xg_filename:
+                    xg_model_path = models_dir / xg_filename
 
     if not comp:
         return render(request, "api_football/gemini_predictions.html", context)
     context["competition"] = comp
+    context["xg_model_available"] = bool(xg_model_path and xg_model_path.exists())
     if not model_path or not model_path.exists():
         return render(request, "api_football/gemini_predictions.html", context)
 
@@ -748,21 +769,52 @@ def gemini_predictions(request):
     now = timezone.now()
     start = now - timedelta(days=3)
     end = now + timedelta(days=14)
-    games = (
+    games_qs = (
         Game.objects.filter(competition=comp, kickoff__gte=start, kickoff__lte=end)
         .select_related("home_team", "away_team")
         .order_by("kickoff")[:80]
     )
+    games = list(games_qs)
+
+    lambda_predictions = {}
+    if predict_lambdas_for_games:
+        lambda_predictions = {
+            game.pk: lam for game, lam in predict_lambdas_for_games(games, model_path)
+        }
+    if not lambda_predictions and predict_lambda_for_game:
+        for game in games:
+            lam = predict_lambda_for_game(game, model_path)
+            if lam is not None:
+                lambda_predictions[game.pk] = lam
+
+    xg_predictions = {}
+    if context["xg_model_available"] and xg_model_path:
+        if predict_probabilities_for_games:
+            xg_predictions = {
+                game.pk: prob for game, prob in predict_probabilities_for_games(games, xg_model_path)
+            }
+        elif predict_probability_for_game:
+            for game in games:
+                prob = predict_probability_for_game(game, xg_model_path)
+                if prob is not None:
+                    xg_predictions[game.pk] = prob
+
     rows = []
     for game in games:
-        lam = predict_lambda_for_game(game, model_path) if predict_lambda_for_game else None
-        if lam is not None:
-            probs = poisson_probabilities(lam) if poisson_probabilities else None
-            rows.append({
-                "game": game,
-                "lambda": lam,
-                "prob_over_2_5": probs.get("prob_over_2_5") if probs else None,
-            })
+        lam = lambda_predictions.get(game.pk)
+        if lam is None:
+            continue
+        prob_over = None
+        if poisson_probabilities:
+            probs = poisson_probabilities(lam)
+            if probs:
+                prob_over = probs.get("prob_over_2_5")
+        rows.append({
+            "game": game,
+            "poisson_lambda": lam,
+            "poisson_prob_over_2_5": prob_over,
+            "xg_prob_over_2_5": xg_predictions.get(game.pk),
+        })
     context["games_with_prediction"] = rows
     return render(request, "api_football/gemini_predictions.html", context)
 

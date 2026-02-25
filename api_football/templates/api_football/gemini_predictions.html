@@ -8,7 +8,7 @@
 </p>
 
 <h1>ML Over/Under 2.5 predictions</h1>
-<p style="color:#8b949e;">Expected goals (λ) and P(Over 2.5) from Poisson model. Games: last 3 days and next 14 days.</p>
+<p style="color:#8b949e;">Expected goals (λ) and P(Over 2.5) from the Poisson model, plus an xG-informed classifier probability. Window: last 3 days and next 14 days.</p>
 
 <p style="margin-bottom:0.5rem;"><strong>By league:</strong>
   <a href="?league=premier">Premier League</a> ·
@@ -28,6 +28,12 @@
   </form>
 </p>
 
+{% if xg_model_available %}
+<p style="color:#8b949e;">Showing Poisson λ + probability, plus xG classifier probability.</p>
+{% else %}
+<p style="color:#8b949e;">xG classifier not trained yet for this competition — only Poisson outputs are shown.</p>
+{% endif %}
+
 {% if not model_available %}
 <p style="color:#f85149;">No trained model for this competition. To find competition IDs: <code>python manage.py list_competitions</code>. Then: <code>python manage.py build_gemini_dataset -c &lt;pk_or_api_id&gt; -o gemini_dataset.csv</code>, <code>train_gemini_poisson -d ... -o ...</code>, or use <code>train_all_gemini_competitions</code>.</p>
 {% elif not games_with_prediction %}
@@ -39,8 +45,9 @@
       <th style="text-align:left; padding:0.5rem 0.5rem 0.5rem 0;">Kickoff</th>
       <th style="text-align:left; padding:0.5rem;">Home</th>
       <th style="text-align:left; padding:0.5rem;">Away</th>
-      <th style="text-align:center; padding:0.5rem;">λ (expected goals)</th>
-      <th style="text-align:center; padding:0.5rem;">P(Over 2.5)</th>
+      <th style="text-align:center; padding:0.5rem;">Poisson λ</th>
+      <th style="text-align:center; padding:0.5rem;">Poisson P(Over 2.5)</th>
+      <th style="text-align:center; padding:0.5rem;">xG P(Over 2.5)</th>
       <th></th>
     </tr>
   </thead>
@@ -50,8 +57,21 @@
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ row.game.kickoff|date:"Y-m-d H:i" }}</td>
       <td style="padding:0.5rem;">{{ row.game.home_team.name }}</td>
       <td style="padding:0.5rem;">{{ row.game.away_team.name }}</td>
-      <td style="text-align:center; padding:0.5rem;">{{ row.lambda|floatformat:2 }}</td>
-      <td style="text-align:center; padding:0.5rem;">{{ row.prob_over_2_5|floatformat:2 }}</td>
+      <td style="text-align:center; padding:0.5rem;">
+        {% if row.poisson_lambda is not None %}
+          {{ row.poisson_lambda|floatformat:2 }}
+        {% else %}—{% endif %}
+      </td>
+      <td style="text-align:center; padding:0.5rem;">
+        {% if row.poisson_prob_over_2_5 is not None %}
+          {{ row.poisson_prob_over_2_5|floatformat:2 }}
+        {% else %}—{% endif %}
+      </td>
+      <td style="text-align:center; padding:0.5rem;">
+        {% if row.xg_prob_over_2_5 is not None %}
+          {{ row.xg_prob_over_2_5|floatformat:2 }}
+        {% else %}—{% endif %}
+      </td>
       <td style="padding:0.5rem;"><a href="{% url 'api_football:game_statistics' row.game.pk %}" style="color:#58a6ff;">Stats</a></td>
     </tr>
     {% endfor %}
