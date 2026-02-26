@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -54,12 +55,27 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(f"Training on {len(X_train)} samples (test {len(X_test)})")
+        # sklearn 1.8+: use l1_ratio/C instead of penalty to avoid deprecation
+        penalty = options["penalty"]
+        if penalty == "none":
+            l1_ratio = None
+            reg_C = np.inf
+        elif penalty == "l1":
+            l1_ratio = 1.0
+            reg_C = 1.0
+        elif penalty == "elasticnet":
+            l1_ratio = 0.5
+            reg_C = 1.0
+        else:
+            l1_ratio = 0.0  # l2
+            reg_C = 1.0
         model = train_classifier(
             X_train,
             y_train,
             solver=options["solver"],
             max_iter=options["max_iter"],
-            penalty=options["penalty"],
+            C=reg_C,
+            l1_ratio=l1_ratio,
         )
 
         if not X_test.empty:

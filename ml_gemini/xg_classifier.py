@@ -61,12 +61,18 @@ def load_dataset_split(csv_path, train_ratio=0.8, feature_columns=None):
 
 
 def train_classifier(X, y, **kwargs):
-    """Train a logistic regression classifier for Over/Under."""
+    """Train a logistic regression classifier for Over/Under.
+    Uses C and l1_ratio (sklearn 1.8+) instead of deprecated penalty.
+    """
     params = {
         "solver": kwargs.pop("solver", "lbfgs"),
         "max_iter": kwargs.pop("max_iter", 500),
         "class_weight": kwargs.pop("class_weight", "balanced"),
+        "C": kwargs.pop("C", 1.0),
     }
+    l1_ratio = kwargs.pop("l1_ratio", None)
+    if l1_ratio is not None:
+        params["l1_ratio"] = l1_ratio
     params.update(kwargs)
     model = LogisticRegression(**params)
     model.fit(X, y)
