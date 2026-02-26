@@ -42,11 +42,11 @@
       <th style="text-align:center; padding:0.5rem;">Score</th>
       <th style="text-align:left; padding:0.5rem;">Away</th>
       <th style="text-align:left; padding:0.5rem;">Competition</th>
-      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">ML Over 2.5</th>{% endif %}
+      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">Poisson Over 2.5</th><th style="text-align:center; padding:0.5rem;">xG Over 2.5</th>{% endif %}
     </tr>
   </thead>
   <tbody>
-    {% for g, ml, ml_correct in games_with_ml %}
+    {% for g, ml, ml_correct, xg_correct in games_with_ml %}
     <tr style="border-bottom:1px solid #21262d;">
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{% if g.kickoff %}{{ g.kickoff|date:"H:i" }}{% else %}—{% endif %}</td>
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
@@ -59,7 +59,10 @@
       <td style="padding:0.5rem;">{% if g.competition %}<a href="{% url 'api_football:competition_detail' g.competition_id %}" style="color:#58a6ff;">{{ g.competition.name }}</a> <span style="color:#6e7681; font-size:0.85rem;">({{ g.competition.api_id }})</span>{% else %}—{% endif %}</td>
       {% if game_ml_odds %}
       <td style="text-align:center; padding:0.5rem; {% if ml_correct == True %}background:#1a3d1a; color:#7ee787;{% elif ml_correct == False %}background:#3d1a1a; color:#f85149;{% endif %}">
-        {% if ml %}{{ ml.ml_over_pct }}% Over{% if g.is_finished and ml_correct != None %}{% if ml_correct %} ✓{% else %} ✗{% endif %}{% endif %}{% else %}—{% endif %}
+        {% if ml and ml.ml_over_pct is not None %}{{ ml.ml_over_pct }}%{% if g.is_finished and ml_correct != None %}{% if ml_correct %} ✓{% else %} ✗{% endif %}{% endif %}{% else %}—{% endif %}
+      </td>
+      <td style="text-align:center; padding:0.5rem; {% if xg_correct == True %}background:#1a3d1a; color:#7ee787;{% elif xg_correct == False %}background:#3d1a1a; color:#f85149;{% endif %}">
+        {% if ml and ml.xg_over_pct is not None %}{{ ml.xg_over_pct }}%{% if g.is_finished and xg_correct != None %}{% if xg_correct %} ✓{% else %} ✗{% endif %}{% endif %}{% else %}—{% endif %}
       </td>
       {% endif %}
     </tr>

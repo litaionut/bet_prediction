@@ -163,17 +163,29 @@ def competition_bulk_delete(request):
     return redirect("api_football:competition_list")
 
 
-def _run_ml_command(request, competition, step_name, run_build, run_train):
-    """Run build_gemini_dataset and/or train_gemini_poisson for this competition. Return (success, message)."""
+def _run_ml_command(request, competition, step_name, run_build, run_train, run_train_xg=False):
+    """Run build_gemini_dataset and/or train_gemini_poisson and/or train_gemini_xg_classifier. Return (success, message)."""
     api_id = getattr(competition, "api_id", None)
     if api_id is None:
         return False, "Competition has no api_id."
     dataset_name = f"gemini_dataset_{api_id}.csv"
-    model_name = f"gemini_poisson_{api_id}.json"
+    poisson_name = f"gemini_poisson_{api_id}.json"
+    xg_name = f"gemini_xg_{api_id}.pkl"
     out = StringIO()
     err = StringIO()
-    build_msg = ""
-    train_msg = ""
+    messages_list = []
+
+    def _read_out():
+        out.seek(0)
+        s = (out.read() or "").strip() or ""
+        if err.getvalue():
+            s += " " + err.getvalue().strip()
+        out.truncate(0)
+        out.seek(0)
+        err.truncate(0)
+        err.seek(0)
+        return s
+
     try:
         if run_build:
             call_command(
@@ -183,29 +195,26 @@ def _run_ml_command(request, competition, step_name, run_build, run_train):
                 stdout=out,
                 stderr=err,
             )
-            out.seek(0)
-            build_msg = (out.read() or "").strip() or "Dataset built."
-            if err.getvalue():
-                build_msg += " " + err.getvalue().strip()
-            out.truncate(0)
-            out.seek(0)
-            err.truncate(0)
-            err.seek(0)
+            messages_list.append(_read_out() or "Dataset built.")
         if run_train:
             call_command(
                 "train_gemini_poisson",
                 dataset=dataset_name,
-                output=model_name,
+                output=poisson_name,
                 stdout=out,
                 stderr=err,
             )
-            out.seek(0)
-            train_msg = (out.read() or "").strip() or "Model saved."
-            if err.getvalue():
-                train_msg += " " + err.getvalue().strip()
-        if run_build and run_train:
-            return True, (build_msg + " " + train_msg).strip()
-        return True, (build_msg if run_build else train_msg).strip()
+            messages_list.append(_read_out() or "Poisson model saved.")
+        if run_train_xg:
+            call_command(
+                "train_gemini_xg_classifier",
+                dataset=dataset_name,
+                output=xg_name,
+                stdout=out,
+                stderr=err,
+            )
+            messages_list.append(_read_out() or "xG classifier saved.")
+        return True, " ".join(messages_list).strip()
     except Exception as e:
         return False, str(e)
 
@@ -238,10 +247,14 @@ def competition_detail(request, pk):
                 f"Downloaded {competition.name}: teams {total_tc} created, {total_tu} updated; fixtures {total_fc} created, {total_fu} updated.",
             )
             return redirect("api_football:competition_detail", pk=pk)
-        if action in ("build_dataset", "train_model", "build_and_train"):
-            run_build = action in ("build_dataset", "build_and_train")
-            run_train = action in ("train_model", "build_and_train")
-            ok, msg = _run_ml_command(request, competition, action, run_build=run_build, run_train=run_train)
+        if action in ("build_dataset", "train_model", "train_xg_model", "build_and_train", "build_and_train_all"):
+            run_build = action in ("build_dataset", "build_and_train", "build_and_train_all")
+            run_train = action in ("train_model", "build_and_train", "build_and_train_all")
+            run_train_xg = action in ("train_xg_model", "build_and_train_all")
+            ok, msg = _run_ml_command(
+                request, competition, action,
+                run_build=run_build, run_train=run_train, run_train_xg=run_train_xg,
+            )
             if ok:
                 messages.success(request, msg)
             else:
@@ -294,34 +307,50 @@ def competition_detail(request, pk):
 
     country_slug = slugify(competition.country) or competition.country.lower().replace(" ", "-") if competition.country else ""
     game_ml_odds = {}
-    # ML only for games on current page (load model once via predict_lambdas_for_games)
+    models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
     page_games = upcoming + past
-    if page_games and get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
-        models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
-        if models_dir and competition:
-            filename = get_model_filename_for_competition(competition)
-            if filename:
-                model_path = models_dir / filename
-                if model_path.exists():
-                    for g, lam in predict_lambdas_for_games(page_games, model_path):
-                        p_over = poisson_probabilities(lam).get("prob_over_2_5")
-                        if p_over is not None:
-                            game_ml_odds[g.pk] = {
-                                "ml_over_pct": round(100 * p_over),
-                                "ml_under_pct": round(100 * (1 - p_over)),
-                            }
+
+    # Poisson model predictions
+    if page_games and models_dir and competition and get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
+        filename = get_model_filename_for_competition(competition)
+        if filename:
+            model_path = models_dir / filename
+            if model_path.exists():
+                for g, lam in predict_lambdas_for_games(page_games, model_path):
+                    p_over = poisson_probabilities(lam).get("prob_over_2_5")
+                    if p_over is not None:
+                        if g.pk not in game_ml_odds:
+                            game_ml_odds[g.pk] = {}
+                        game_ml_odds[g.pk]["ml_over_pct"] = round(100 * p_over)
+                        game_ml_odds[g.pk]["ml_under_pct"] = round(100 * (1 - p_over))
+
+    # xG classifier predictions (second model, same page games)
+    if page_games and models_dir and competition and get_xg_model_filename_for_competition and predict_probabilities_for_games:
+        xg_filename = get_xg_model_filename_for_competition(competition)
+        if xg_filename:
+            xg_path = models_dir / xg_filename
+            if xg_path.exists():
+                for g, prob in predict_probabilities_for_games(page_games, xg_path):
+                    if g.pk not in game_ml_odds:
+                        game_ml_odds[g.pk] = {}
+                    game_ml_odds[g.pk]["xg_over_pct"] = round(100 * prob)
+                    game_ml_odds[g.pk]["xg_under_pct"] = round(100 * (1 - prob))
+
     upcoming_with_ml = [(g, game_ml_odds.get(g.pk)) for g in upcoming]
-    # For past games: add whether ML prediction matched the result (green=correct, red=wrong)
+    # For past games: add whether each model prediction matched the result
     past_with_ml = []
     for g in past:
         ml = game_ml_odds.get(g.pk)
-        correct = None
+        total_goals = (g.home_goals or 0) + (g.away_goals or 0)
+        actual_over = total_goals > 2.5
+        ml_correct = None
+        xg_correct = None
         if ml is not None:
-            total_goals = (g.home_goals or 0) + (g.away_goals or 0)
-            actual_over = total_goals > 2.5
-            predicted_over = ml["ml_over_pct"] >= 50
-            correct = actual_over == predicted_over
-        past_with_ml.append((g, ml, correct))
+            if ml.get("ml_over_pct") is not None:
+                ml_correct = actual_over == (ml["ml_over_pct"] >= 50)
+            if ml.get("xg_over_pct") is not None:
+                xg_correct = actual_over == (ml["xg_over_pct"] >= 50)
+        past_with_ml.append((g, ml, ml_correct, xg_correct))
 
     # ML accuracy for this league: green (correct) / total past games with prediction
     ml_accuracy = None
@@ -592,9 +621,10 @@ def game_list_today(request):
     games = list(page.object_list)
 
     game_ml_odds = {}
-    if games and get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
-        models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
-        if models_dir:
+    models_dir = getattr(settings, "ML_MODELS_DIR", None) or getattr(settings, "BASE_DIR", None)
+    if games and models_dir:
+        # Poisson per competition
+        if get_model_filename_for_competition and predict_lambdas_for_games and poisson_probabilities:
             by_filename = {}
             for g in games:
                 if not g.competition:
@@ -609,19 +639,43 @@ def game_list_today(request):
                 for game, lam in predict_lambdas_for_games(group_list, model_path):
                     p_over = poisson_probabilities(lam).get("prob_over_2_5")
                     if p_over is not None:
-                        game_ml_odds[game.pk] = {"ml_over_pct": round(100 * p_over), "ml_under_pct": round(100 * (1 - p_over))}
+                        if game.pk not in game_ml_odds:
+                            game_ml_odds[game.pk] = {}
+                        game_ml_odds[game.pk]["ml_over_pct"] = round(100 * p_over)
+                        game_ml_odds[game.pk]["ml_under_pct"] = round(100 * (1 - p_over))
+        # xG classifier per competition
+        if get_xg_model_filename_for_competition and predict_probabilities_for_games:
+            by_xg_filename = {}
+            for g in games:
+                if not g.competition:
+                    continue
+                fn = get_xg_model_filename_for_competition(g.competition)
+                if fn:
+                    by_xg_filename.setdefault(fn, []).append(g)
+            for _filename, group_list in by_xg_filename.items():
+                xg_path = models_dir / _filename
+                if not xg_path.exists():
+                    continue
+                for game, prob in predict_probabilities_for_games(group_list, xg_path):
+                    if game.pk not in game_ml_odds:
+                        game_ml_odds[game.pk] = {}
+                    game_ml_odds[game.pk]["xg_over_pct"] = round(100 * prob)
+                    game_ml_odds[game.pk]["xg_under_pct"] = round(100 * (1 - prob))
 
-    # For finished games with ML: green = correct prediction, red = wrong
+    # For finished games: whether each model was correct
     games_with_ml = []
     for g in games:
         ml = game_ml_odds.get(g.pk)
         ml_correct = None
+        xg_correct = None
         if ml is not None and g.is_finished():
             total_goals = (g.home_goals or 0) + (g.away_goals or 0)
             actual_over = total_goals > 2.5
-            predicted_over = ml["ml_over_pct"] >= 50
-            ml_correct = actual_over == predicted_over
-        games_with_ml.append((g, ml, ml_correct))
+            if ml.get("ml_over_pct") is not None:
+                ml_correct = actual_over == (ml["ml_over_pct"] >= 50)
+            if ml.get("xg_over_pct") is not None:
+                xg_correct = actual_over == (ml["xg_over_pct"] >= 50)
+        games_with_ml.append((g, ml, ml_correct, xg_correct))
 
     context = {
         "selected_date": selected_date,

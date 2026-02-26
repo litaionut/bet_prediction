@@ -17,15 +17,17 @@
 {% endif %}
 
 <section style="background:#161b22; padding:1rem 1.25rem; border-radius:8px; margin:1rem 0; border:1px solid #30363d;">
-  <h2 style="margin:0 0 0.5rem 0; font-size:1rem;">Train ML model (Over/Under 2.5)</h2>
-  <p style="font-size:0.9rem; color:#8b949e; margin:0 0 0.75rem 0;">Build dataset from past games, then train the Poisson model. Predictions will appear on this page and on the predictions list.</p>
+  <h2 style="margin:0 0 0.5rem 0; font-size:1rem;">Train ML models (Over/Under 2.5)</h2>
+  <p style="font-size:0.9rem; color:#8b949e; margin:0 0 0.75rem 0;">Build dataset from past games (Poisson + xG features), then train Poisson and/or xG classifier. Predictions appear in the tables below.</p>
   <form method="post" action="{% url 'api_football:competition_detail' competition.pk %}" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
     {% csrf_token %}
     <button type="submit" name="action" value="build_dataset">Build dataset</button>
-    <button type="submit" name="action" value="train_model">Train model</button>
-    <button type="submit" name="action" value="build_and_train">Build dataset &amp; train</button>
+    <button type="submit" name="action" value="train_model">Train Poisson</button>
+    <button type="submit" name="action" value="train_xg_model">Train xG</button>
+    <button type="submit" name="action" value="build_and_train">Build &amp; train Poisson</button>
+    <button type="submit" name="action" value="build_and_train_all">Build &amp; train both</button>
   </form>
-  <p style="font-size:0.8rem; color:#6e7681; margin:0.5rem 0 0 0;">Uses <code>gemini_dataset_{{ competition.api_id }}.csv</code> and <code>gemini_poisson_{{ competition.api_id }}.json</code>.</p>
+  <p style="font-size:0.8rem; color:#6e7681; margin:0.5rem 0 0 0;">Dataset: <code>gemini_dataset_{{ competition.api_id }}.csv</code>. Models: <code>gemini_poisson_{{ competition.api_id }}.json</code>, <code>gemini_xg_{{ competition.api_id }}.pkl</code>.</p>
 </section>
 
 <section style="background:#161b22; padding:1rem 1.25rem; border-radius:8px; margin:1rem 0; border:1px solid #30363d;">
@@ -58,7 +60,7 @@
       <th style="text-align:left; padding:0.5rem;">Home</th>
       <th style="text-align:center; padding:0.5rem;">Score</th>
       <th style="text-align:left; padding:0.5rem;">Away</th>
-      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">ML Over 2.5</th>{% endif %}
+      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">Poisson Over 2.5</th><th style="text-align:center; padding:0.5rem;">xG Over 2.5</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -68,7 +70,10 @@
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
       <td style="text-align:center; padding:0.5rem;">{{ g.score_display }}</td>
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
-      {% if game_ml_odds %}<td style="text-align:center; padding:0.5rem;">{% if ml %}{{ ml.ml_over_pct }}% Over{% else %}—{% endif %}</td>{% endif %}
+      {% if game_ml_odds %}
+      <td style="text-align:center; padding:0.5rem;">{% if ml and ml.ml_over_pct is not None %}{{ ml.ml_over_pct }}%{% else %}—{% endif %}</td>
+      <td style="text-align:center; padding:0.5rem;">{% if ml and ml.xg_over_pct is not None %}{{ ml.xg_over_pct }}%{% else %}—{% endif %}</td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
@@ -100,11 +105,11 @@
       <th style="text-align:left; padding:0.5rem;">Home</th>
       <th style="text-align:center; padding:0.5rem;">Score</th>
       <th style="text-align:left; padding:0.5rem;">Away</th>
-      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">ML Over 2.5</th>{% endif %}
+      {% if game_ml_odds %}<th style="text-align:center; padding:0.5rem;">Poisson Over 2.5</th><th style="text-align:center; padding:0.5rem;">xG Over 2.5</th>{% endif %}
     </tr>
   </thead>
   <tbody>
-    {% for g, ml, ml_correct in past_with_ml %}
+    {% for g, ml, ml_correct, xg_correct in past_with_ml %}
     <tr style="border-bottom:1px solid #21262d;">
       <td style="padding:0.5rem 0.5rem 0.5rem 0; color:#8b949e;">{{ g.kickoff|date:"Y-m-d H:i" }}</td>
       <td style="padding:0.5rem;">{{ g.home_team.name }}</td>
@@ -114,8 +119,13 @@
       <td style="padding:0.5rem;">{{ g.away_team.name }}</td>
       {% if game_ml_odds %}
       <td style="text-align:center; padding:0.5rem;">
-        {% if ml %}
-        <span style="color:{% if ml_correct %}#3fb950{% elif ml_correct == False %}#f85149{% else %}#8b949e{% endif %};">{{ ml.ml_over_pct }}% Over</span>
+        {% if ml and ml.ml_over_pct is not None %}
+        <span style="color:{% if ml_correct %}#3fb950{% elif ml_correct == False %}#f85149{% else %}#8b949e{% endif %};">{{ ml.ml_over_pct }}%</span>
+        {% else %}—{% endif %}
+      </td>
+      <td style="text-align:center; padding:0.5rem;">
+        {% if ml and ml.xg_over_pct is not None %}
+        <span style="color:{% if xg_correct %}#3fb950{% elif xg_correct == False %}#f85149{% else %}#8b949e{% endif %};">{{ ml.xg_over_pct }}%</span>
         {% else %}—{% endif %}
       </td>
       {% endif %}
